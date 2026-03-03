@@ -1,0 +1,206 @@
+{
+  "projectType": "framework",
+  "projectName": "Dalamud",
+  "projectDescription": "FFXIV plugin development framework and API for creating game extensions",
+  "theme": "aspen",
+  "primaryColor": "#7289DA",
+  "lightColor": "#99AAB5",
+  "darkColor": "#2C2F33",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/plugin-lifecycle",
+              "concepts/dependency-injection",
+              "concepts/service-locator"
+            ]
+          },
+          {
+            "group": "Plugin Development",
+            "pages": [
+              "plugin-dev/getting-started",
+              "plugin-dev/creating-plugin",
+              "plugin-dev/plugin-manifest",
+              "plugin-dev/plugin-interface",
+              "plugin-dev/debugging"
+            ]
+          },
+          {
+            "group": "UI & ImGui",
+            "pages": [
+              "ui/ui-builder",
+              "ui/drawing-windows",
+              "ui/imgui-basics",
+              "ui/fonts",
+              "ui/textures",
+              "ui/notifications"
+            ]
+          },
+          {
+            "group": "Game Integration",
+            "pages": [
+              "game/client-state",
+              "game/chat",
+              "game/commands",
+              "game/framework",
+              "game/target-manager",
+              "game/data-manager",
+              "game/object-table"
+            ]
+          },
+          {
+            "group": "IPC & Shared Data",
+            "pages": [
+              "ipc/overview",
+              "ipc/callgate-provider",
+              "ipc/callgate-subscriber",
+              "ipc/data-sharing"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "advanced/hooking",
+              "advanced/memory",
+              "advanced/signatures",
+              "advanced/game-interop",
+              "advanced/client-structs"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/building-dalamud",
+              "guides/contributing",
+              "guides/testing",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Plugin API",
+            "pages": [
+              "api/plugin/idalamudplugin",
+              "api/plugin/idalamudplugininterface",
+              "api/plugin/plugin-load-reason",
+              "api/plugin/installed-plugin-state"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/overview",
+              "api/services/iclientstate",
+              "api/services/ichatgui",
+              "api/services/icommandmanager",
+              "api/services/idatamanager",
+              "api/services/iframework",
+              "api/services/igamegui",
+              "api/services/itargetmanager",
+              "api/services/iobjecttable",
+              "api/services/itoastgui",
+              "api/services/inotificationmanager",
+              "api/services/ikeystate",
+              "api/services/igameinteropprovider",
+              "api/services/isigscanner",
+              "api/services/all-services"
+            ]
+          },
+          {
+            "group": "Interface",
+            "pages": [
+              "api/interface/iuibuilder",
+              "api/interface/ifonthandle",
+              "api/interface/itextureprovider"
+            ]
+          },
+          {
+            "group": "IPC",
+            "pages": [
+              "api/ipc/icallgateprovider",
+              "api/ipc/icallgatesubscriber"
+            ]
+          },
+          {
+            "group": "Game Types",
+            "pages": [
+              "api/game/clientlanguage",
+              "api/game/actionkind"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Plugin framework with hot-loading and dependency injection",
+    "ImGui-based UI system for in-game overlays and windows",
+    "Comprehensive game state access (chat, targets, inventory, etc.)",
+    "Inter-plugin communication via IPC CallGates",
+    "Memory hooking and native interop with game internals",
+    "Game data access via Lumina integration",
+    "Event-driven architecture for game lifecycle hooks",
+    "Command registration and chat integration"
+  ],
+  "publicApiSurface": [
+    "IDalamudPlugin",
+    "IDalamudPluginInterface",
+    "IClientState",
+    "IChatGui",
+    "ICommandManager",
+    "IDataManager",
+    "IFramework",
+    "IGameGui",
+    "ITargetManager",
+    "IObjectTable",
+    "IUiBuilder",
+    "ICallGateProvider<T>",
+    "ICallGateSubscriber<T>",
+    "IGameInteropProvider",
+    "ISigScanner",
+    "ITextureProvider",
+    "INotificationManager",
+    "IToastGui",
+    "IKeyState",
+    "IGameConfig",
+    "ICondition",
+    "IPartyList",
+    "IBuddyList",
+    "IFateTable",
+    "IDutyState",
+    "IJobGauges",
+    "IAddonLifecycle",
+    "IContextMenu",
+    "IGameInventory",
+    "IPlayerState",
+    "IPluginLog",
+    "IMarketBoard",
+    "INamePlateGui",
+    "IFlyTextGui",
+    "IPartyFinderGui",
+    "ITitleScreenMenu",
+    "ITextureSubstitutionProvider",
+    "ISeStringEvaluator",
+    "IGameLifecycle",
+    "IAgentLifecycle",
+    "IAetheryteList",
+    "IUnlockState"
+  ]
+}
