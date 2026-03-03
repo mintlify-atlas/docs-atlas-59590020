@@ -1,0 +1,346 @@
+---
+title: IGameInteropProvider
+description: Create hooks for game functions
+---
+
+## Overview
+
+`IGameInteropProvider` is responsible for the creation of hooks. It allows plugins to hook game functions using various methods including signatures, symbols, and addresses.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Enums
+
+### HookBackend
+
+```csharp
+public enum HookBackend
+{
+    Automatic,  // Choose the best backend automatically
+    Reloaded,   // Use Reloaded hooks
+    MinHook     // Use MinHook (use only after consulting Dalamud team)
+}
+```
+
+## Methods
+
+### InitializeFromAttributes
+
+```csharp
+public void InitializeFromAttributes(object self);
+```
+
+Initializes Hook&lt;T&gt; members decorated with the SignatureAttribute. Also initializes any delegate members and fills out any IntPtr members decorated with the SignatureAttribute with the resolved address.
+
+<ParamField path="self" type="object" required>
+  The object to initialize
+</ParamField>
+
+### HookFromFunctionPointerVariable
+
+```csharp
+public Hook<T> HookFromFunctionPointerVariable<T>(nint address, T detour) where T : Delegate;
+```
+
+Creates a hook by replacing the original address with an address pointing to a newly created jump to the detour.
+
+<ParamField path="address" type="nint" required>
+  A memory address to install a hook
+</ParamField>
+
+<ParamField path="detour" type="T" required>
+  Callback function. Delegate must have the same original function prototype
+</ParamField>
+
+<ResponseField name="return" type="Hook<T>">
+  The hook with the supplied parameters
+</ResponseField>
+
+### HookFromImport
+
+```csharp
+public Hook<T> HookFromImport<T>(
+    ProcessModule? module,
+    string moduleName,
+    string functionName,
+    uint hintOrOrdinal,
+    T detour) where T : Delegate;
+```
+
+Creates a hook by rewriting import table address.
+
+<ParamField path="module" type="ProcessModule?" required>
+  Module to check for. Current process' main module if null
+</ParamField>
+
+<ParamField path="moduleName" type="string" required>
+  Name of the DLL, including the extension
+</ParamField>
+
+<ParamField path="functionName" type="string" required>
+  Decorated name of the function
+</ParamField>
+
+<ParamField path="hintOrOrdinal" type="uint" required>
+  Hint or ordinal. 0 to unspecify
+</ParamField>
+
+<ParamField path="detour" type="T" required>
+  Callback function
+</ParamField>
+
+<ResponseField name="return" type="Hook<T>">
+  The hook with the supplied parameters
+</ResponseField>
+
+### HookFromSymbol
+
+```csharp
+public Hook<T> HookFromSymbol<T>(
+    string moduleName,
+    string exportName,
+    T detour,
+    HookBackend backend = HookBackend.Automatic) where T : Delegate;
+```
+
+Creates a hook using GetProcAddress to infer the hooking address. The hook is not activated until Enable() is called.
+
+<ParamField path="moduleName" type="string" required>
+  A name of the module currently loaded in memory (e.g., ws2_32.dll)
+</ParamField>
+
+<ParamField path="exportName" type="string" required>
+  A name of the exported function (e.g., send)
+</ParamField>
+
+<ParamField path="detour" type="T" required>
+  Callback function
+</ParamField>
+
+<ParamField path="backend" type="HookBackend">
+  Hooking library to use (default: Automatic)
+</ParamField>
+
+<ResponseField name="return" type="Hook<T>">
+  The hook with the supplied parameters
+</ResponseField>
+
+### HookFromAddress
+
+```csharp
+public Hook<T> HookFromAddress<T>(
+    nint procAddress,
+    T detour,
+    HookBackend backend = HookBackend.Automatic) where T : Delegate;
+
+public Hook<T> HookFromAddress<T>(
+    nuint procAddress,
+    T detour,
+    HookBackend backend = HookBackend.Automatic) where T : Delegate;
+
+public unsafe Hook<T> HookFromAddress<T>(
+    void* procAddress,
+    T detour,
+    HookBackend backend = HookBackend.Automatic) where T : Delegate;
+```
+
+Creates a hook from a memory address. The hook is not activated until Enable() is called.
+
+<ParamField path="procAddress" type="nint | nuint | void*" required>
+  A memory address to install a hook
+</ParamField>
+
+<ParamField path="detour" type="T" required>
+  Callback function
+</ParamField>
+
+<ParamField path="backend" type="HookBackend">
+  Hooking library to use (default: Automatic)
+</ParamField>
+
+<ResponseField name="return" type="Hook<T>">
+  The hook with the supplied parameters
+</ResponseField>
+
+### HookFromSignature
+
+```csharp
+public Hook<T> HookFromSignature<T>(
+    string signature,
+    T detour,
+    HookBackend backend = HookBackend.Automatic) where T : Delegate;
+```
+
+Creates a hook from a signature into the Dalamud target module.
+
+<ParamField path="signature" type="string" required>
+  Signature of function to hook
+</ParamField>
+
+<ParamField path="detour" type="T" required>
+  Callback function
+</ParamField>
+
+<ParamField path="backend" type="HookBackend">
+  Hooking library to use (default: Automatic)
+</ParamField>
+
+<ResponseField name="return" type="Hook<T>">
+  The hook with the supplied parameters
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IGameInteropProvider interop;
+    private Hook<MyDelegate>? myHook;
+    
+    private delegate nint MyDelegate(nint a, nint b);
+    
+    public MyPlugin(IGameInteropProvider interop)
+    {
+        this.interop = interop;
+        
+        // Create a hook from a signature
+        this.myHook = this.interop.HookFromSignature<MyDelegate>(
+            "E8 ?? ?? ?? ?? 48 8B D8 48 85 C0",
+            MyDetour);
+        
+        // Enable the hook
+        this.myHook.Enable();
+    }
+    
+    private nint MyDetour(nint a, nint b)
+    {
+        // Your detour code here
+        Log.Information($"Hook called with: {a:X}, {b:X}");
+        
+        // Call the original function
+        var result = this.myHook!.Original(a, b);
+        
+        return result;
+    }
+    
+    public void Dispose()
+    {
+        this.myHook?.Dispose();
+    }
+}
+```
+
+## Advanced Usage
+
+### Using SignatureAttribute
+
+```csharp
+public class MyHooks
+{
+    private delegate nint MyFunctionDelegate(nint a, nint b);
+    
+    [Signature("E8 ?? ?? ?? ?? 48 8B D8")]
+    private Hook<MyFunctionDelegate>? myHook = null;
+    
+    public MyHooks(IGameInteropProvider interop)
+    {
+        // Initialize all hooks from attributes
+        interop.InitializeFromAttributes(this);
+        
+        // Set up the detour
+        if (this.myHook != null)
+        {
+            this.myHook.Enable();
+        }
+    }
+    
+    private nint MyDetour(nint a, nint b)
+    {
+        return this.myHook!.Original(a, b);
+    }
+}
+```
+
+### Hook from Known Address
+
+```csharp
+public void CreateAddressHook(nint address)
+{
+    var hook = this.interop.HookFromAddress<MyDelegate>(
+        address,
+        MyDetour);
+    
+    hook.Enable();
+}
+```
+
+### Hook External Function
+
+```csharp
+private delegate int SendDelegate(
+    IntPtr socket,
+    IntPtr buffer,
+    int length,
+    int flags);
+
+public void HookWinsockSend()
+{
+    var hook = this.interop.HookFromSymbol<SendDelegate>(
+        "ws2_32.dll",
+        "send",
+        SendDetour);
+    
+    hook.Enable();
+}
+
+private int SendDetour(
+    IntPtr socket,
+    IntPtr buffer,
+    int length,
+    int flags)
+{
+    Log.Information($"Sending {length} bytes");
+    return hook.Original(socket, buffer, length, flags);
+}
+```
+
+### Conditional Hook Execution
+
+```csharp
+private nint MyDetour(nint a, nint b)
+{
+    // Add custom logic
+    if (ShouldModifyBehavior())
+    {
+        // Return custom value
+        return customValue;
+    }
+    
+    // Call original
+    return this.myHook!.Original(a, b);
+}
+```
+
+## Hook Lifecycle
+
+1. **Create** - Create the hook using one of the `HookFrom*` methods
+2. **Enable** - Call `Enable()` on the hook to activate it
+3. **Use** - Your detour function will be called instead of the original
+4. **Disable** - Call `Disable()` to temporarily deactivate
+5. **Dispose** - Call `Dispose()` to remove the hook permanently
+
+## Remarks
+
+- Always dispose hooks in your plugin's `Dispose()` method
+- Call `Enable()` after creating a hook to activate it
+- Use `Original` to call the original function from your detour
+- The delegate type must match the original function's signature exactly
+- Use `HookBackend.Automatic` unless you have specific requirements
+- Only use `MinHook` backend after consulting with the Dalamud team
+- Hooks can be temporarily disabled with `Disable()` and re-enabled with `Enable()`
+- SignatureAttribute allows for cleaner hook initialization
+- Be careful with hook detours - errors can crash the game

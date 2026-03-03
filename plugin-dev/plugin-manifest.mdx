@@ -1,0 +1,436 @@
+---
+title: "Plugin Manifest"
+description: "Complete reference for the plugin manifest file"
+---
+
+## Overview
+
+The plugin manifest is a JSON file that describes your plugin's metadata, dependencies, and configuration. It's used by:
+
+- The plugin installer to display information
+- Dalamud to determine compatibility and load order
+- The repository system to distribute updates
+
+You create a minimal manifest file (e.g., `MyPlugin.json`), and **DalamudPackager** automatically generates the full manifest during build.
+
+## Minimal Manifest
+
+For development, create a JSON file with your plugin's name:
+
+```json MyPlugin.json
+{
+  "Author": "Your Name",
+  "Name": "My Plugin",
+  "Punchline": "Short description of your plugin",
+  "Description": "Longer description explaining what your plugin does and its key features.",
+  "InternalName": "MyPlugin",
+  "RepoUrl": "https://github.com/yourusername/MyPlugin"
+}
+```
+
+<Info>
+  The `InternalName` must match your assembly name and should never change once published.
+</Info>
+
+## Full Manifest Fields
+
+Here are all available fields from `IPluginManifest` (Dalamud/Plugin/Internal/Types/Manifest/IPluginManifest.cs:8-127):
+
+### Required Fields
+
+<ParamField path="InternalName" type="string" required>
+  The internal identifier for your plugin. Must match the assembly name and remain consistent across versions.
+  
+  ```json
+  "InternalName": "MyPlugin"
+  ```
+</ParamField>
+
+<ParamField path="Name" type="string" required>
+  The display name shown in the plugin installer.
+  
+  ```json
+  "Name": "My Awesome Plugin"
+  ```
+</ParamField>
+
+<ParamField path="Author" type="string" required>
+  The plugin author's name or list of authors.
+  
+  ```json
+  "Author": "John Doe"
+  ```
+</ParamField>
+
+### Description Fields
+
+<ParamField path="Punchline" type="string">
+  A short, one-line description of your plugin's main purpose. Displayed prominently in the installer.
+  
+  ```json
+  "Punchline": "Enhances your crafting experience"
+  ```
+</ParamField>
+
+<ParamField path="Description" type="string">
+  A longer, detailed description of your plugin's functionality and features.
+  
+  ```json
+  "Description": "This plugin provides advanced crafting tools including macro management, material tracking, and quality prediction."
+  ```
+</ParamField>
+
+<ParamField path="Changelog" type="string">
+  What's new in this version. Shown when the plugin is updated.
+  
+  ```json
+  "Changelog": "- Added new feature X\n- Fixed bug Y\n- Improved performance"
+  ```
+</ParamField>
+
+### Categorization
+
+<ParamField path="Tags" type="string[]">
+  List of tags for search and filtering in the plugin installer.
+  
+  ```json
+  "Tags": ["ui", "crafting", "inventory", "utility"]
+  ```
+</ParamField>
+
+<ParamField path="CategoryTags" type="string[]">
+  Category tags defined on the plugin (used internally by the plugin repository).
+  
+  ```json
+  "CategoryTags": ["jobs", "ui"]
+  ```
+</ParamField>
+
+### Versioning
+
+<ParamField path="AssemblyVersion" type="Version" required>
+  The version of your plugin. Automatically set by DalamudPackager from your assembly version.
+  
+  ```json
+  "AssemblyVersion": "1.2.3.0"
+  ```
+  
+  Set in your `.csproj`:
+  ```xml
+  <Version>1.2.3</Version>
+  ```
+</ParamField>
+
+<ParamField path="TestingAssemblyVersion" type="Version">
+  Version of the testing variant of your plugin. Users can opt into testing versions.
+  
+  ```json
+  "TestingAssemblyVersion": "1.3.0.0"
+  ```
+</ParamField>
+
+<ParamField path="DalamudApiLevel" type="int" default="10">
+  The Dalamud API level your plugin targets. This ensures compatibility.
+  
+  Current API level: `10` (see PluginManifest.cs:85)
+  
+  ```json
+  "DalamudApiLevel": 10
+  ```
+</ParamField>
+
+<ParamField path="TestingDalamudApiLevel" type="int">
+  The API level for the testing variant of your plugin.
+  
+  ```json
+  "TestingDalamudApiLevel": 10
+  ```
+</ParamField>
+
+<ParamField path="MinimumDalamudVersion" type="Version">
+  Minimum Dalamud version required by your plugin.
+  
+  ```json
+  "MinimumDalamudVersion": "9.0.0.0"
+  ```
+</ParamField>
+
+### URLs and Media
+
+<ParamField path="RepoUrl" type="string">
+  URL to your plugin's source code repository or website.
+  
+  ```json
+  "RepoUrl": "https://github.com/username/MyPlugin"
+  ```
+</ParamField>
+
+<ParamField path="IconUrl" type="string">
+  URL to an icon image for your plugin (shown in the installer).
+  
+  ```json
+  "IconUrl": "https://example.com/icon.png"
+  ```
+</ParamField>
+
+<ParamField path="ImageUrls" type="string[]">
+  List of screenshot URLs to display in the plugin installer.
+  
+  ```json
+  "ImageUrls": [
+    "https://example.com/screenshot1.png",
+    "https://example.com/screenshot2.png"
+  ]
+  ```
+</ParamField>
+
+### Behavioral Flags
+
+<ParamField path="CanUnloadAsync" type="bool" default="false">
+  Whether your plugin can be safely unloaded outside the framework thread.
+  
+  Set to `true` if your plugin doesn't interact with the game client directly.
+  
+  ```json
+  "CanUnloadAsync": true
+  ```
+  
+  See PluginManifest.cs:141
+</ParamField>
+
+<ParamField path="SupportsProfiles" type="bool" default="true">
+  Whether your plugin supports Dalamud's profile system.
+  
+  ```json
+  "SupportsProfiles": true
+  ```
+  
+  See PluginManifest.cs:145
+</ParamField>
+
+<ParamField path="IsTestingExclusive" type="bool" default="false">
+  Whether this plugin is only available for testing (not for general release).
+  
+  ```json
+  "IsTestingExclusive": false
+  ```
+</ParamField>
+
+### Load Configuration
+
+<ParamField path="LoadRequiredState" type="int" default="2">
+  The required Dalamud load step for this plugin. Controls when your plugin loads.
+  
+  Values (see PluginManifest.cs:118-125):
+  - `0`: During Framework.Tick when drawing facilities are available
+  - `1`: During Framework.Tick
+  - `2`: No requirement (default)
+  
+  ```json
+  "LoadRequiredState": 0
+  ```
+</ParamField>
+
+<ParamField path="LoadSync" type="bool" default="false">
+  Whether Dalamud must load this plugin synchronously, not at the same time as other plugins.
+  
+  Set to `true` if your plugin has strict initialization requirements.
+  
+  ```json
+  "LoadSync": false
+  ```
+  
+  See PluginManifest.cs:130
+</ParamField>
+
+<ParamField path="LoadPriority" type="int" default="0">
+  Load priority for this plugin. Higher values mean higher priority.
+  
+  ```json
+  "LoadPriority": 0
+  ```
+  
+  See PluginManifest.cs:137
+</ParamField>
+
+### Feedback and Distribution
+
+<ParamField path="FeedbackMessage" type="string">
+  Message shown to users when they submit feedback about your plugin.
+  
+  ```json
+  "FeedbackMessage": "Please report issues on GitHub!"
+  ```
+</ParamField>
+
+<ParamField path="AcceptsFeedback" type="bool" default="true">
+  Whether your plugin accepts user feedback through Dalamud.
+  
+  ```json
+  "AcceptsFeedback": true
+  ```
+  
+  See PluginManifest.cs:156
+</ParamField>
+
+### Statistics (Read-Only)
+
+These fields are populated by the plugin repository and are read-only:
+
+<ParamField path="DownloadCount" type="long" readOnly>
+  Total number of downloads for your plugin.
+  
+  See PluginManifest.cs:93
+</ParamField>
+
+<ParamField path="LastUpdate" type="long" readOnly>
+  Unix timestamp of the last update.
+  
+  See PluginManifest.cs:97
+</ParamField>
+
+### Advanced Fields
+
+<ParamField path="Dip17Channel" type="string">
+  DIP17 channel name for alternative distribution channels.
+  
+  ```json
+  "_Dip17Channel": "stable"
+  ```
+  
+  See PluginManifest.cs:163
+</ParamField>
+
+<ParamField path="ApplicableVersion" type="GameVersion">
+  Game version this plugin is compatible with. Managed by the repository.
+  
+  See PluginManifest.cs:77
+</ParamField>
+
+<ParamField path="DownloadLinkInstall" type="string" internal>
+  Download URL for initial installation (managed by repository).
+  
+  See PluginManifest.cs:103
+</ParamField>
+
+<ParamField path="DownloadLinkUpdate" type="string" internal>
+  Download URL for updates (managed by repository).
+  
+  See PluginManifest.cs:109
+</ParamField>
+
+<ParamField path="DownloadLinkTesting" type="string" internal>
+  Download URL for testing versions (managed by repository).
+  
+  See PluginManifest.cs:115
+</ParamField>
+
+<ParamField path="IsHide" type="bool" internal>
+  Whether the plugin is hidden in the installer (managed by repository).
+  
+  See PluginManifest.cs:50
+</ParamField>
+
+## Example: Complete Manifest
+
+Here's a comprehensive example:
+
+```json MyPlugin.json
+{
+  "Author": "Jane Developer",
+  "Name": "Advanced Crafting Helper",
+  "Punchline": "Your ultimate crafting companion",
+  "Description": "This plugin enhances the crafting experience with advanced features including macro management, material tracking, optimal rotation suggestions, and quality prediction. Perfect for crafters of all levels.",
+  "InternalName": "AdvancedCraftingHelper",
+  "AssemblyVersion": "2.1.5",
+  "TestingAssemblyVersion": "2.2.0",
+  "RepoUrl": "https://github.com/janedeveloper/AdvancedCraftingHelper",
+  "IconUrl": "https://example.com/icon.png",
+  "ImageUrls": [
+    "https://example.com/screenshot1.png",
+    "https://example.com/screenshot2.png",
+    "https://example.com/screenshot3.png"
+  ],
+  "Tags": ["crafting", "ui", "tools", "utility"],
+  "CategoryTags": ["jobs", "ui"],
+  "DalamudApiLevel": 10,
+  "LoadRequiredState": 0,
+  "LoadPriority": 0,
+  "CanUnloadAsync": false,
+  "SupportsProfiles": true,
+  "Changelog": "Version 2.1.5:\n- Fixed macro execution bug\n- Added support for new recipes\n- Improved UI responsiveness\n- Updated for latest game patch",
+  "FeedbackMessage": "Found a bug? Please report it on GitHub with details about your game version and steps to reproduce.",
+  "AcceptsFeedback": true
+}
+```
+
+## DalamudPackager Integration
+
+DalamudPackager reads your manifest and `.csproj` to generate the final manifest:
+
+```xml .csproj
+<PropertyGroup>
+  <Version>2.1.5</Version>
+  <PackageProjectUrl>https://github.com/janedeveloper/AdvancedCraftingHelper</PackageProjectUrl>
+  <DalamudPlugin>true</DalamudPlugin>
+</PropertyGroup>
+
+<ItemGroup>
+  <Content Include="MyPlugin.json">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+</ItemGroup>
+```
+
+## Testing Variants
+
+You can offer a testing version with newer features:
+
+1. Set `TestingAssemblyVersion` higher than `AssemblyVersion`
+2. Set `TestingDalamudApiLevel` (if needed)
+3. Users can opt into testing in plugin settings
+
+```json
+"AssemblyVersion": "2.1.5",
+"TestingAssemblyVersion": "2.2.0-beta.1"
+```
+
+Check if running testing version:
+
+```csharp
+if (pluginInterface.IsTesting)
+{
+    // Running testing version
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Semantic Versioning" icon="code-branch">
+  Use semantic versioning: MAJOR.MINOR.PATCH
+  - MAJOR: Breaking changes
+  - MINOR: New features
+  - PATCH: Bug fixes
+</Card>
+
+<Card title="Detailed Descriptions" icon="align-left">
+  Write clear, detailed descriptions and changelogs. Users need to understand what your plugin does.
+</Card>
+
+<Card title="Consistent InternalName" icon="fingerprint">
+  Never change `InternalName` after release. It's used to track updates and user installations.
+</Card>
+
+<Card title="Tag Appropriately" icon="tags">
+  Use relevant tags to help users find your plugin. Check existing plugins for common tags.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+<Card title="Plugin Interface" icon="plug" href="/plugin-dev/plugin-interface">
+  Learn about the plugin interface and available services
+</Card>

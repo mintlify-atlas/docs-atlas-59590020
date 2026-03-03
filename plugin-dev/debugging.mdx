@@ -1,0 +1,664 @@
+---
+title: "Debugging"
+description: "Debug your Dalamud plugins effectively"
+---
+
+## Overview
+
+Debugging Dalamud plugins requires attaching to the game process. This guide covers debugging techniques, common issues, and best practices.
+
+<Info>
+  **Prerequisites**:
+  - Visual Studio 2022, JetBrains Rider, or VS Code with C# debugger
+  - Your plugin built in Debug configuration
+  - FFXIV running with Dalamud
+</Info>
+
+## Attaching the Debugger
+
+### Visual Studio
+
+<Steps>
+<Step title="Build in Debug Mode">
+
+Ensure your project is built in Debug configuration:
+
+```bash
+dotnet build -c Debug
+```
+
+Or select **Debug** from the configuration dropdown in Visual Studio.
+
+</Step>
+
+<Step title="Start the Game">
+
+Launch Final Fantasy XIV through XIVLauncher with Dalamud enabled.
+
+</Step>
+
+<Step title="Attach to Process">
+
+1. In Visual Studio: **Debug** → **Attach to Process** (or `Ctrl+Alt+P`)
+2. In the process list, find `ffxiv_dx11.exe`
+3. Click **Attach**
+
+Alternatively, use the search box at the top to quickly filter for "ffxiv".
+
+</Step>
+
+<Step title="Set Breakpoints">
+
+Click in the left margin of your code editor to set breakpoints on the lines you want to debug.
+
+When the code executes, Visual Studio will pause execution and let you inspect variables.
+
+</Step>
+</Steps>
+
+### JetBrains Rider
+
+<Steps>
+<Step title="Configure Attach Settings">
+
+1. **Run** → **Edit Configurations**
+2. Click **+** → **Attach to Process**
+3. Name it "Attach to FFXIV"
+4. Set the filter to "ffxiv_dx11.exe"
+
+</Step>
+
+<Step title="Attach">
+
+1. Build your project in Debug mode
+2. Start FFXIV with Dalamud
+3. In Rider: **Run** → **Attach to Process** → Select your configuration
+4. Set breakpoints and debug
+
+</Step>
+</Steps>
+
+### Visual Studio Code
+
+Create a `launch.json` configuration:
+
+```json .vscode/launch.json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to FFXIV",
+      "type": "coreclr",
+      "request": "attach",
+      "processName": "ffxiv_dx11.exe"
+    }
+  ]
+}
+```
+
+Then:
+1. Press `F5` or **Run** → **Start Debugging**
+2. Select "Attach to FFXIV"
+
+## Debug Configuration
+
+Optimize your `.csproj` for debugging:
+
+```xml .csproj
+<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+  <DebugSymbols>true</DebugSymbols>
+  <DebugType>full</DebugType>
+  <Optimize>false</Optimize>
+  <DefineConstants>DEBUG;TRACE</DefineConstants>
+</PropertyGroup>
+```
+
+This ensures:
+- Full debug symbols are generated
+- Optimizations are disabled (easier to debug)
+- `DEBUG` constant is defined
+
+## Debugging Techniques
+
+### Conditional Breakpoints
+
+Break only when specific conditions are met:
+
+1. Right-click a breakpoint
+2. Select **Conditions**
+3. Add a condition, e.g., `userId == 12345`
+
+The debugger will only break when the condition is true.
+
+### Immediate Window
+
+Execute code while debugging:
+
+1. While paused at a breakpoint, open **Debug** → **Windows** → **Immediate** (or `Ctrl+Alt+I`)
+2. Type expressions and press Enter:
+
+```csharp
+player.Name
+chatGui.Print("Debug message")
+config.Enabled = true
+```
+
+### Watch Window
+
+Monitor variables continuously:
+
+1. Open **Debug** → **Windows** → **Watch** → **Watch 1**
+2. Add expressions to watch
+3. Values update as you step through code
+
+### Call Stack
+
+Inspect the call stack:
+
+1. Open **Debug** → **Windows** → **Call Stack** (or `Ctrl+Alt+C`)
+2. See the sequence of method calls that led to the current point
+3. Click on frames to navigate
+
+### Tracepoints
+
+Log messages without stopping execution:
+
+1. Right-click in the margin where you'd set a breakpoint
+2. Select **Tracepoint**
+3. Enter a message like: `Player HP: {player.CurrentHp}`
+4. Messages appear in the Output window
+
+## Logging
+
+Use Dalamud's logging system for runtime diagnostics:
+
+```csharp
+using Dalamud.Plugin.Services;
+
+public class Plugin : IDalamudPlugin
+{
+    private readonly IPluginLog log;
+
+    public Plugin(IPluginLog log)
+    {
+        this.log = log;
+        
+        // Different log levels
+        log.Verbose("Detailed trace information");
+        log.Debug("Debug information");
+        log.Information("General information");
+        log.Warning("Warning message");
+        log.Error("Error message");
+        log.Fatal("Critical error");
+    }
+}
+```
+
+### View Logs
+
+Logs appear in:
+1. **Dalamud log** - `/xllog` in-game
+2. **Log file** - `%AppData%\XIVLauncher\dalamud.log`
+3. **Output window** - In your IDE when debugging
+
+### Structured Logging
+
+Use structured parameters:
+
+```csharp
+log.Information("Player {PlayerName} used action {ActionId}", 
+    player.Name, actionId);
+```
+
+This is better than string interpolation for parsing and analysis.
+
+## Exception Handling
+
+### Try-Catch Blocks
+
+Always wrap risky operations:
+
+```csharp
+try
+{
+    var data = LoadDataFromFile();
+    ProcessData(data);
+}
+catch (FileNotFoundException ex)
+{
+    log.Error(ex, "Could not find data file");
+    chatGui.PrintError("Plugin data file is missing!");
+}
+catch (Exception ex)
+{
+    log.Error(ex, "Unexpected error processing data");
+}
+```
+
+### First-Chance Exceptions
+
+Catch all exceptions in Visual Studio:
+
+1. **Debug** → **Windows** → **Exception Settings** (or `Ctrl+Alt+E`)
+2. Check **Common Language Runtime Exceptions**
+3. Debugger will break on all exceptions, even caught ones
+
+<Warning>
+  The game throws many internal exceptions. You may want to uncheck this after finding your issue.
+</Warning>
+
+### Exception Filter
+
+Break only on specific exceptions:
+
+```csharp
+try
+{
+    DangerousOperation();
+}
+catch (SpecificException ex) when (ex.Code == 404)
+{
+    log.Warning("Expected error: {Message}", ex.Message);
+}
+```
+
+Set exception breakpoint conditions for only certain exception types or messages.
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Breakpoints Not Hitting">
+    
+    **Causes:**
+    - Plugin not loaded or outdated version
+    - Code not matching the compiled assembly
+    - Debugging symbols not loaded
+    
+    **Solutions:**
+    1. Verify plugin is loaded: `/xlplugins`
+    2. Rebuild in Debug mode
+    3. Ensure breakpoint is on an executable line
+    4. Check **Debug** → **Windows** → **Modules** to see if your DLL is loaded
+    5. Right-click the DLL → **Load Symbols**
+  
+  </Accordion>
+
+  <Accordion title="Game Crashes When Debugging">
+    
+    **Causes:**
+    - Unhandled exception in plugin code
+    - Invalid memory access
+    - Deadlock or infinite loop
+    
+    **Solutions:**
+    1. Enable first-chance exceptions to catch the error
+    2. Add try-catch blocks around suspicious code
+    3. Check for null references
+    4. Validate memory addresses before dereferencing
+    5. Review recent changes to plugin code
+  
+  </Accordion>
+
+  <Accordion title="Variables Show Optimized Away">
+    
+    **Cause:**
+    Building in Release mode with optimizations enabled.
+    
+    **Solution:**
+    Build in Debug mode:
+    ```bash
+    dotnet build -c Debug
+    ```
+  
+  </Accordion>
+
+  <Accordion title="Cannot Edit Code While Debugging">
+    
+    **Limitation:**
+    Edit and Continue is not supported for plugins since they run in a separate AssemblyLoadContext.
+    
+    **Workaround:**
+    1. Stop debugging
+    2. Make changes
+    3. Build
+    4. Hot reload your plugin: `/xldev` → **Reload Plugin**
+    5. Re-attach debugger
+  
+  </Accordion>
+
+  <Accordion title="Performance Issues While Debugging">
+    
+    **Causes:**
+    - Too many breakpoints
+    - Watching complex expressions
+    - First-chance exceptions enabled
+    
+    **Solutions:**
+    1. Remove unnecessary breakpoints
+    2. Simplify watch expressions
+    3. Disable first-chance exceptions
+    4. Use tracepoints instead of breakpoints for logging
+  
+  </Accordion>
+</AccordionGroup>
+
+## Hot Reload
+
+Dev plugins support hot reloading without restarting the game:
+
+<Steps>
+<Step title="Make Code Changes">
+
+Edit your plugin code as needed.
+
+</Step>
+
+<Step title="Build">
+
+Build your project:
+
+```bash
+dotnet build -c Debug
+```
+
+Ensure the output is copied to your `devPlugins` folder.
+
+</Step>
+
+<Step title="Reload in Game">
+
+1. Type `/xldev` in-game
+2. Go to the **Plugin Dev** tab
+3. Find your plugin
+4. Click **Reload**
+
+Your plugin will unload and reload with the new code.
+
+</Step>
+
+<Step title="Re-attach Debugger (Optional)">
+
+If you want to debug the reloaded plugin:
+
+1. Detach the debugger (**Debug** → **Detach All**)
+2. Re-attach to `ffxiv_dx11.exe`
+3. Set breakpoints
+
+</Step>
+</Steps>
+
+<Tip>
+  Set up a post-build event to automatically copy files:
+  
+  ```xml
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy /Y /I /E &quot;$(TargetDir)*&quot; &quot;$(AppData)\XIVLauncher\devPlugins\$(ProjectName)\&quot;" />
+  </Target>
+  ```
+</Tip>
+
+## Memory Debugging
+
+When working with memory and pointers:
+
+### Memory Window
+
+View raw memory:
+
+1. **Debug** → **Windows** → **Memory** → **Memory 1**
+2. Enter an address expression
+3. View bytes, words, or other formats
+
+### Pointer Validation
+
+Always validate pointers:
+
+```csharp
+unsafe
+{
+    var ptr = GetSomePointer();
+    
+    if (ptr == IntPtr.Zero)
+    {
+        log.Error("Null pointer");
+        return;
+    }
+    
+    try
+    {
+        var value = *(int*)ptr;
+    }
+    catch (AccessViolationException ex)
+    {
+        log.Error(ex, "Invalid memory access at {Address:X}", ptr);
+    }
+}
+```
+
+### Using SigScanner
+
+Debug signature scanning:
+
+```csharp
+var sigScanner = pluginInterface.GetService<ISigScanner>();
+
+try
+{
+    var address = sigScanner.ScanText("E8 ?? ?? ?? ?? 48 8B 5C 24");
+    log.Debug("Found signature at {Address:X}", address);
+}
+catch (KeyNotFoundException)
+{
+    log.Error("Signature not found - may be outdated");
+}
+```
+
+## Performance Profiling
+
+### Stopwatch Timing
+
+Measure execution time:
+
+```csharp
+using System.Diagnostics;
+
+var sw = Stopwatch.StartNew();
+ExpensiveOperation();
+sw.Stop();
+
+log.Debug("Operation took {Elapsed}ms", sw.ElapsedMilliseconds);
+
+if (sw.ElapsedMilliseconds > 100)
+{
+    log.Warning("Operation is too slow!");
+}
+```
+
+### Frame Time Monitoring
+
+Monitor UI draw performance:
+
+```csharp
+private Stopwatch drawTimer = new();
+
+private void Draw()
+{
+    drawTimer.Restart();
+    
+    // Draw UI
+    DrawWindows();
+    
+    drawTimer.Stop();
+    
+    if (drawTimer.ElapsedMilliseconds > 16) // More than one frame at 60fps
+    {
+        log.Warning("Draw took {Elapsed}ms - too slow!", drawTimer.ElapsedMilliseconds);
+    }
+}
+```
+
+<Warning>
+  Draw methods are called every frame (60+ times per second). Keep them fast!
+</Warning>
+
+## Testing Strategies
+
+### Unit Testing
+
+While full unit testing is challenging, you can test pure functions:
+
+```csharp Tests/UtilityTests.cs
+using Xunit;
+
+public class UtilityTests
+{
+    [Fact]
+    public void ParseItemId_ValidInput_ReturnsId()
+    {
+        var result = ItemParser.ParseItemId("[Item:12345]");
+        Assert.Equal(12345, result);
+    }
+    
+    [Fact]
+    public void ParseItemId_InvalidInput_ReturnsNull()
+    {
+        var result = ItemParser.ParseItemId("Invalid");
+        Assert.Null(result);
+    }
+}
+```
+
+### Integration Testing
+
+Test in-game with controlled scenarios:
+
+```csharp
+private void TestFeature()
+{
+    try
+    {
+        log.Information("Starting test: Feature X");
+        
+        // Setup
+        var initialState = GetState();
+        
+        // Execute
+        PerformAction();
+        
+        // Verify
+        var finalState = GetState();
+        if (finalState != expectedState)
+        {
+            log.Error("Test failed: Expected {Expected}, got {Actual}",
+                expectedState, finalState);
+        }
+        else
+        {
+            log.Information("Test passed");
+        }
+    }
+    finally
+    {
+        // Cleanup
+        ResetState();
+    }
+}
+```
+
+### Debug Commands
+
+Add debug commands for testing:
+
+```csharp
+if (pluginInterface.IsDev)
+{
+    commandManager.AddHandler("/pdebug", new CommandInfo(OnDebugCommand)
+    {
+        HelpMessage = "Debug commands",
+        ShowInHelp = false
+    });
+}
+
+private void OnDebugCommand(string command, string args)
+{
+    var parts = args.Split(' ');
+    
+    switch (parts[0])
+    {
+        case "test":
+            RunTests();
+            break;
+        case "dump":
+            DumpState();
+            break;
+        case "reset":
+            ResetState();
+            break;
+        default:
+            chatGui.Print("Unknown debug command");
+            break;
+    }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Log Liberally" icon="file-lines">
+  Add logging statements throughout your code. You can filter by log level later.
+</Card>
+
+<Card title="Validate Inputs" icon="shield-check">
+  Always validate data from external sources (game memory, files, IPC) before using it.
+</Card>
+
+<Card title="Use Assertions" icon="circle-exclamation">
+  Use Debug.Assert for invariants that should never be false:
+  ```csharp
+  Debug.Assert(player != null, "Player should be loaded");
+  ```
+</Card>
+
+<Card title="Test Edge Cases" icon="vial">
+  Test your plugin with unusual conditions: level 1 character, empty inventory, etc.
+</Card>
+
+</CardGroup>
+
+## Remote Debugging
+
+For debugging on another machine:
+
+1. Install **Remote Debugging Tools** on the game machine
+2. Start the remote debugger: `msvsmon.exe`
+3. In Visual Studio: **Debug** → **Attach to Process**
+4. Change **Connection type** to **Remote (no authentication)**
+5. Enter the remote machine name
+6. Select `ffxiv_dx11.exe`
+
+<Warning>
+  Remote debugging requires both machines to be on the same network and have appropriate firewall rules.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+  Common issues and solutions
+</Card>
+
+<Card title="Testing Guide" icon="flask" href="/guides/testing">
+  Learn about testing strategies
+</Card>
+
+<Card title="Game Integration" icon="gamepad" href="/game/client-state">
+  Work with game state and data
+</Card>
+
+<Card title="Advanced Topics" icon="star" href="/advanced/hooking">
+  Explore hooking, memory, and signatures
+</Card>
+
+</CardGroup>

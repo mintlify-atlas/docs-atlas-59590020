@@ -1,0 +1,76 @@
+---
+title: Services Overview
+description: Overview of Dalamud plugin services for interacting with FFXIV
+---
+
+Dalamud provides a comprehensive set of services that allow plugins to interact with Final Fantasy XIV. These services are injected into your plugin through dependency injection and provide access to game state, UI elements, and various subsystems.
+
+## Getting Started
+
+Services are accessed through dependency injection in your plugin constructor:
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IClientState clientState;
+    private readonly IChatGui chatGui;
+    
+    public MyPlugin(
+        IClientState clientState,
+        IChatGui chatGui)
+    {
+        this.clientState = clientState;
+        this.chatGui = chatGui;
+    }
+}
+```
+
+## Core Services
+
+### Game State
+- [IClientState](/api/services/iclientstate) - Access game client state, territory info, and login events
+- [ICondition](/api/services/all-services#icondition) - Check player conditions like combat, mounted, etc.
+- [IObjectTable](/api/services/iobjecttable) - Access spawned game objects and entities
+- [ITargetManager](/api/services/itargetmanager) - Get and set player targets
+- [IPartyList](/api/services/all-services#ipartylist) - Access party and alliance members
+- [IDutyState](/api/services/all-services#idutystate) - Track duty state and events
+
+### User Interface
+- [IChatGui](/api/services/ichatgui) - Interact with the chat window
+- [IGameGui](/api/services/igamegui) - Access game UI elements and coordinates
+- [IToastGui](/api/services/itoastgui) - Display toast notifications
+- [INotificationManager](/api/services/inotificationmanager) - Manage ImGui notifications
+
+### Commands & Input
+- [ICommandManager](/api/services/icommandmanager) - Register slash commands
+- [IKeyState](/api/services/ikeystate) - Access keyboard state
+
+### Data & Resources
+- [IDataManager](/api/services/idatamanager) - Access game data sheets and files
+- [ITextureProvider](/api/services/all-services#itextureprovider) - Load and create textures
+
+### Framework & Hooking
+- [IFramework](/api/services/iframework) - Framework update events and task scheduling
+- [IGameInteropProvider](/api/services/igameinteropprovider) - Create hooks for game functions
+- [ISigScanner](/api/services/isigscanner) - Scan memory for signatures
+
+### Logging
+- [IPluginLog](/api/services/all-services#ipluginlog) - Plugin logging service
+
+## Service Lifetime
+
+All services follow the plugin lifetime:
+- Services are available after plugin construction
+- Services remain valid until plugin disposal
+- Always unsubscribe from events in your `Dispose()` method
+
+## Best Practices
+
+1. **Dependency Injection** - Request only the services you need in your constructor
+2. **Event Cleanup** - Always unsubscribe from service events in `Dispose()`
+3. **Thread Safety** - Most services must be used from the framework thread
+4. **Error Handling** - Wrap service calls in try-catch blocks for stability
+
+## Complete Service List
+
+For a complete list of all available services, see [All Services](/api/services/all-services).

@@ -1,0 +1,503 @@
+---
+title: ISigScanner
+description: Scan memory for byte signatures
+---
+
+## Overview
+
+`ISigScanner` facilitates searching for memory signatures in the game's process. It provides methods to scan different sections of memory (.text, .data, .rdata) for byte patterns.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Properties
+
+### IsCopy
+
+```csharp
+public bool IsCopy { get; }
+```
+
+Gets a value indicating whether the search on this module is performed on a copy.
+
+<ResponseField name="IsCopy" type="bool">
+  True if searching on a memory copy
+</ResponseField>
+
+### Is32BitProcess
+
+```csharp
+public bool Is32BitProcess { get; }
+```
+
+Gets a value indicating whether the ProcessModule is 32-bit.
+
+<ResponseField name="Is32BitProcess" type="bool">
+  True if the process is 32-bit
+</ResponseField>
+
+### SearchBase
+
+```csharp
+public IntPtr SearchBase { get; }
+```
+
+Gets the base address of the search area. When copied, this will be the address of the copy.
+
+<ResponseField name="SearchBase" type="IntPtr">
+  The base search address
+</ResponseField>
+
+### TextSectionBase
+
+```csharp
+public IntPtr TextSectionBase { get; }
+```
+
+Gets the base address of the .text section search area.
+
+<ResponseField name="TextSectionBase" type="IntPtr">
+  The .text section base address
+</ResponseField>
+
+### TextSectionOffset
+
+```csharp
+public long TextSectionOffset { get; }
+```
+
+Gets the offset of the .text section from the base of the module.
+
+<ResponseField name="TextSectionOffset" type="long">
+  The .text section offset
+</ResponseField>
+
+### TextSectionSize
+
+```csharp
+public int TextSectionSize { get; }
+```
+
+Gets the size of the .text section.
+
+<ResponseField name="TextSectionSize" type="int">
+  The .text section size in bytes
+</ResponseField>
+
+### DataSectionBase
+
+```csharp
+public IntPtr DataSectionBase { get; }
+```
+
+Gets the base address of the .data section search area.
+
+<ResponseField name="DataSectionBase" type="IntPtr">
+  The .data section base address
+</ResponseField>
+
+### DataSectionOffset
+
+```csharp
+public long DataSectionOffset { get; }
+```
+
+Gets the offset of the .data section from the base of the module.
+
+<ResponseField name="DataSectionOffset" type="long">
+  The .data section offset
+</ResponseField>
+
+### DataSectionSize
+
+```csharp
+public int DataSectionSize { get; }
+```
+
+Gets the size of the .data section.
+
+<ResponseField name="DataSectionSize" type="int">
+  The .data section size in bytes
+</ResponseField>
+
+### RDataSectionBase
+
+```csharp
+public IntPtr RDataSectionBase { get; }
+```
+
+Gets the base address of the .rdata section search area.
+
+<ResponseField name="RDataSectionBase" type="IntPtr">
+  The .rdata section base address
+</ResponseField>
+
+### RDataSectionOffset
+
+```csharp
+public long RDataSectionOffset { get; }
+```
+
+Gets the offset of the .rdata section from the base of the module.
+
+<ResponseField name="RDataSectionOffset" type="long">
+  The .rdata section offset
+</ResponseField>
+
+### RDataSectionSize
+
+```csharp
+public int RDataSectionSize { get; }
+```
+
+Gets the size of the .rdata section.
+
+<ResponseField name="RDataSectionSize" type="int">
+  The .rdata section size in bytes
+</ResponseField>
+
+### Module
+
+```csharp
+public ProcessModule Module { get; }
+```
+
+Gets the ProcessModule on which the search is performed.
+
+<ResponseField name="Module" type="ProcessModule">
+  The process module
+</ResponseField>
+
+## Methods
+
+### GetStaticAddressFromSig
+
+```csharp
+public nint GetStaticAddressFromSig(string signature, int offset = 0);
+```
+
+Scans for a .data address using a .text function. This is intended to be used with IDA sigs.
+
+<ParamField path="signature" type="string" required>
+  The signature of the function using the data
+</ParamField>
+
+<ParamField path="offset" type="int">
+  The offset from function start of the instruction using the data (default: 0)
+</ParamField>
+
+<ResponseField name="return" type="nint">
+  An IntPtr to the static memory location
+</ResponseField>
+
+### TryGetStaticAddressFromSig
+
+```csharp
+public bool TryGetStaticAddressFromSig(string signature, out nint result, int offset = 0);
+```
+
+Tries to scan for a .data address using a .text function.
+
+<ParamField path="signature" type="string" required>
+  The signature of the function using the data
+</ParamField>
+
+<ParamField path="result" type="nint">
+  An IntPtr to the static memory location, if found (out parameter)
+</ParamField>
+
+<ParamField path="offset" type="int">
+  The offset from function start (default: 0)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the signature was found
+</ResponseField>
+
+### ScanData
+
+```csharp
+public nint ScanData(string signature);
+```
+
+Scans for a byte signature in the .data section.
+
+<ParamField path="signature" type="string" required>
+  The signature to search for
+</ParamField>
+
+<ResponseField name="return" type="nint">
+  The real offset of the found signature
+</ResponseField>
+
+### TryScanData
+
+```csharp
+public bool TryScanData(string signature, out nint result);
+```
+
+Tries to scan for a byte signature in the .data section.
+
+<ParamField path="signature" type="string" required>
+  The signature to search for
+</ParamField>
+
+<ParamField path="result" type="nint">
+  The real offset of the signature, if found (out parameter)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the signature was found
+</ResponseField>
+
+### ScanModule
+
+```csharp
+public nint ScanModule(string signature);
+```
+
+Scans for a byte signature in the whole module search area.
+
+<ParamField path="signature" type="string" required>
+  The signature to search for
+</ParamField>
+
+<ResponseField name="return" type="nint">
+  The real offset of the found signature
+</ResponseField>
+
+### TryScanModule
+
+```csharp
+public bool TryScanModule(string signature, out nint result);
+```
+
+Tries to scan for a byte signature in the whole module search area.
+
+<ParamField path="signature" type="string" required>
+  The signature to search for
+</ParamField>
+
+<ParamField path="result" type="nint">
+  The real offset of the signature, if found (out parameter)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the signature was found
+</ResponseField>
+
+### ScanText
+
+```csharp
+public nint ScanText(string signature);
+```
+
+Scans for a byte signature in the .text section.
+
+<ParamField path="signature" type="string" required>
+  The signature to search for
+</ParamField>
+
+<ResponseField name="return" type="nint">
+  The real offset of the found signature
+</ResponseField>
+
+### TryScanText
+
+```csharp
+public bool TryScanText(string signature, out nint result);
+```
+
+Tries to scan for a byte signature in the .text section.
+
+<ParamField path="signature" type="string" required>
+  The signature to search for
+</ParamField>
+
+<ParamField path="result" type="nint">
+  The real offset of the signature, if found (out parameter)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the signature was found
+</ResponseField>
+
+### ScanAllText
+
+```csharp
+public nint[] ScanAllText(string signature);
+public IEnumerable<nint> ScanAllText(string signature, CancellationToken cancellationToken);
+```
+
+Scans for all matching byte signatures in the .text section.
+
+<ParamField path="signature" type="string" required>
+  The signature to search for
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken">
+  Cancellation token
+</ParamField>
+
+<ResponseField name="return" type="nint[] | IEnumerable<nint>">
+  Array or enumerable of real offsets of found signatures
+</ResponseField>
+
+### ResolveRelativeAddress
+
+```csharp
+public nint ResolveRelativeAddress(nint nextInstAddr, int relOffset);
+```
+
+Resolves a RVA address.
+
+<ParamField path="nextInstAddr" type="nint" required>
+  The address of the next instruction
+</ParamField>
+
+<ParamField path="relOffset" type="int" required>
+  The relative offset
+</ParamField>
+
+<ResponseField name="return" type="nint">
+  The calculated offset
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly ISigScanner sigScanner;
+    private nint importantAddress;
+    
+    public MyPlugin(ISigScanner sigScanner)
+    {
+        this.sigScanner = sigScanner;
+        
+        // Scan for a signature
+        if (this.sigScanner.TryScanText(
+            "E8 ?? ?? ?? ?? 48 8B D8 48 85 C0",
+            out var address))
+        {
+            this.importantAddress = address;
+            Log.Information($"Found signature at: {address:X}");
+        }
+        else
+        {
+            Log.Error("Failed to find signature!");
+        }
+    }
+    
+    public void ScanForStaticAddress()
+    {
+        // Get a static address from a function signature
+        if (this.sigScanner.TryGetStaticAddressFromSig(
+            "48 8D 0D ?? ?? ?? ??",
+            out var staticAddr,
+            3)) // Offset to the RVA
+        {
+            Log.Information($"Static address: {staticAddr:X}");
+        }
+    }
+}
+```
+
+## Advanced Usage
+
+### Signature Formats
+
+```csharp
+// Exact bytes
+"E8 12 34 56 78"
+
+// Wildcards with ??
+"E8 ?? ?? ?? ?? 48 8B"
+
+// IDA-style signature
+"48 8D 0D ?? ?? ?? ?? E8"
+```
+
+### Finding Multiple Matches
+
+```csharp
+public void FindAllMatches()
+{
+    var signature = "E8 ?? ?? ?? ?? 48";
+    var matches = this.sigScanner.ScanAllText(signature);
+    
+    Log.Information($"Found {matches.Length} matches");
+    foreach (var match in matches)
+    {
+        Log.Information($"  Match at: {match:X}");
+    }
+}
+```
+
+### Resolving Relative Addresses
+
+```csharp
+public nint GetFunctionAddress()
+{
+    // Find call instruction
+    var callAddr = this.sigScanner.ScanText("E8 ?? ?? ?? ??");
+    
+    // Read the relative offset (4 bytes after E8)
+    var relOffset = Marshal.ReadInt32(callAddr + 1);
+    
+    // Resolve to absolute address
+    // nextInstAddr = callAddr + 5 (instruction length)
+    var funcAddr = this.sigScanner.ResolveRelativeAddress(
+        callAddr + 5,
+        relOffset);
+    
+    return funcAddr;
+}
+```
+
+### Section-Specific Scanning
+
+```csharp
+public void ScanSpecificSections()
+{
+    // Scan only in .text section (code)
+    if (this.sigScanner.TryScanText("E8 ?? ?? ??", out var textAddr))
+    {
+        Log.Information($"Found in .text: {textAddr:X}");
+    }
+    
+    // Scan only in .data section (initialized data)
+    if (this.sigScanner.TryScanData("12 34 56 78", out var dataAddr))
+    {
+        Log.Information($"Found in .data: {dataAddr:X}");
+    }
+    
+    // Scan entire module
+    if (this.sigScanner.TryScanModule("AB CD EF", out var moduleAddr))
+    {
+        Log.Information($"Found in module: {moduleAddr:X}");
+    }
+}
+```
+
+## Signature Best Practices
+
+1. **Use wildcards** for values that may change between versions
+2. **Keep signatures unique** to avoid false positives
+3. **Include enough context** (usually 10-15 bytes minimum)
+4. **Test across game versions** when possible
+5. **Use Try* methods** for graceful failure handling
+
+## Remarks
+
+- Signatures use hexadecimal byte patterns
+- Use `??` as a wildcard for bytes that may vary
+- The .text section contains executable code
+- The .data section contains initialized global/static variables
+- The .rdata section contains read-only data
+- Always use Try* methods and handle failures gracefully
+- Signatures may break between game updates
+- Resolved addresses are absolute memory addresses, not RVAs

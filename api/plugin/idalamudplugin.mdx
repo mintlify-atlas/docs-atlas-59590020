@@ -1,0 +1,59 @@
+---
+title: IDalamudPlugin
+description: The base interface that all Dalamud plugins must implement
+---
+
+## Overview
+
+`IDalamudPlugin` is the fundamental interface that all Dalamud plugins must implement. It extends `IDisposable` to ensure proper cleanup of plugin resources.
+
+## Interface Definition
+
+```csharp
+public interface IDalamudPlugin : IDisposable
+{
+}
+```
+
+## Description
+
+This interface represents a basic Dalamud plugin. All plugins are required to implement this interface to be recognized and loaded by Dalamud.
+
+### Key Points
+
+- **Inheritance**: Extends `IDisposable`, requiring plugins to implement the `Dispose()` method
+- **Purpose**: Serves as the marker interface for all Dalamud plugins
+- **Cleanup**: The `Dispose()` method is called when the plugin is unloaded, allowing for proper resource cleanup
+
+## Implementation Example
+
+```csharp
+using Dalamud.Plugin;
+
+public class MyPlugin : IDalamudPlugin
+{
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        // Initialize your plugin
+    }
+
+    public void Dispose()
+    {
+        // Clean up resources
+        // Unsubscribe from events
+        // Dispose of managed resources
+    }
+}
+```
+
+## Best Practices
+
+- Always implement `Dispose()` properly to clean up resources when the plugin is unloaded
+- Unsubscribe from all events in `Dispose()` to prevent memory leaks
+- Dispose of any managed resources that implement `IDisposable`
+- Keep the constructor and `Dispose()` method as lightweight as possible
+
+## Related Interfaces
+
+- [IDalamudPluginInterface](/api/plugin/idalamudplugininterface) - Provides access to Dalamud services and functionality
+- [PluginLoadReason](/api/plugin/plugin-load-reason) - Indicates why the plugin was loaded

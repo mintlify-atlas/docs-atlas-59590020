@@ -1,0 +1,263 @@
+---
+title: IKeyState
+description: Access keyboard state and key presses
+---
+
+## Overview
+
+`IKeyState` is a wrapper around the game keystate buffer, which contains the pressed state for all keyboard keys, indexed by virtual key code.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Indexers
+
+### Key Access by Virtual Key Code
+
+```csharp
+public bool this[int vkCode] { get; set; }
+public bool this[VirtualKey vkCode] { get; set; }
+```
+
+Gets or sets the key-pressed state for a given virtual key code.
+
+<ParamField path="vkCode" type="int | VirtualKey" required>
+  The virtual key code to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the specified key is currently pressed
+</ResponseField>
+
+## Methods
+
+### GetRawValue
+
+```csharp
+public int GetRawValue(int vkCode);
+public int GetRawValue(VirtualKey vkCode);
+```
+
+Gets the raw value stored in the index array.
+
+<ParamField path="vkCode" type="int | VirtualKey" required>
+  The virtual key to check
+</ParamField>
+
+<ResponseField name="return" type="int">
+  The raw value stored in the index array
+</ResponseField>
+
+### SetRawValue
+
+```csharp
+public void SetRawValue(int vkCode, int value);
+public void SetRawValue(VirtualKey vkCode, int value);
+```
+
+Sets the raw value in the index array.
+
+<ParamField path="vkCode" type="int | VirtualKey" required>
+  The virtual key to change
+</ParamField>
+
+<ParamField path="value" type="int" required>
+  The raw value to set in the index array
+</ParamField>
+
+### IsVirtualKeyValid
+
+```csharp
+public bool IsVirtualKeyValid(int vkCode);
+public bool IsVirtualKeyValid(VirtualKey vkCode);
+```
+
+Gets a value indicating whether the given VirtualKey code is regarded as valid input by the game.
+
+<ParamField path="vkCode" type="int | VirtualKey" required>
+  Virtual key code
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the code is valid
+</ResponseField>
+
+### GetValidVirtualKeys
+
+```csharp
+public IEnumerable<VirtualKey> GetValidVirtualKeys();
+```
+
+Gets an array of virtual keys the game considers valid input.
+
+<ResponseField name="return" type="IEnumerable<VirtualKey>">
+  An enumerable of valid virtual keys
+</ResponseField>
+
+### ClearAll
+
+```csharp
+public void ClearAll();
+```
+
+Clears the pressed state for all keys.
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IKeyState keyState;
+    private readonly IFramework framework;
+    
+    public MyPlugin(
+        IKeyState keyState,
+        IFramework framework)
+    {
+        this.keyState = keyState;
+        this.framework = framework;
+        
+        this.framework.Update += OnFrameworkUpdate;
+    }
+    
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        // Check if Ctrl key is pressed
+        if (this.keyState[VirtualKey.CONTROL])
+        {
+            Log.Information("Ctrl is pressed");
+        }
+        
+        // Check for specific key combination
+        if (this.keyState[VirtualKey.CONTROL] && this.keyState[VirtualKey.SHIFT])
+        {
+            if (this.keyState[VirtualKey.A])
+            {
+                Log.Information("Ctrl+Shift+A pressed");
+            }
+        }
+    }
+    
+    public void CheckKeyState()
+    {
+        // Check individual keys
+        var isWPressed = this.keyState[VirtualKey.W];
+        var isSpacePressed = this.keyState[VirtualKey.SPACE];
+        
+        Log.Information($"W: {isWPressed}, Space: {isSpacePressed}");
+    }
+    
+    public void Dispose()
+    {
+        this.framework.Update -= OnFrameworkUpdate;
+    }
+}
+```
+
+## Advanced Usage
+
+### Detecting Key Presses
+
+```csharp
+private bool wasKeyPressed = false;
+
+private void OnFrameworkUpdate(IFramework framework)
+{
+    var isKeyPressed = this.keyState[VirtualKey.F1];
+    
+    // Detect key down (transition from not pressed to pressed)
+    if (isKeyPressed && !this.wasKeyPressed)
+    {
+        Log.Information("F1 was just pressed");
+        OnF1Pressed();
+    }
+    
+    this.wasKeyPressed = isKeyPressed;
+}
+```
+
+### Multiple Key Combinations
+
+```csharp
+private void CheckHotkeys()
+{
+    // Ctrl+Shift+F
+    if (this.keyState[VirtualKey.CONTROL] &&
+        this.keyState[VirtualKey.SHIFT] &&
+        this.keyState[VirtualKey.F])
+    {
+        ToggleWindow();
+    }
+    
+    // Alt+Q
+    if (this.keyState[VirtualKey.MENU] && this.keyState[VirtualKey.Q])
+    {
+        QuickAction();
+    }
+}
+```
+
+### Checking Valid Keys
+
+```csharp
+public void ListValidKeys()
+{
+    var validKeys = this.keyState.GetValidVirtualKeys();
+    
+    foreach (var key in validKeys)
+    {
+        Log.Information($"Valid key: {key}");
+    }
+}
+
+public void CheckKeyValidity(VirtualKey key)
+{
+    if (this.keyState.IsVirtualKeyValid(key))
+    {
+        Log.Information($"{key} is valid for game input");
+    }
+    else
+    {
+        Log.Warning($"{key} is not valid for game input");
+    }
+}
+```
+
+### Clearing Key States
+
+```csharp
+public void ResetAllKeys()
+{
+    // Clear all key states
+    this.keyState.ClearAll();
+    Log.Information("All key states cleared");
+}
+```
+
+## Common Virtual Keys
+
+- `VirtualKey.CONTROL` - Ctrl key
+- `VirtualKey.SHIFT` - Shift key
+- `VirtualKey.MENU` - Alt key
+- `VirtualKey.ESCAPE` - Esc key
+- `VirtualKey.SPACE` - Space bar
+- `VirtualKey.RETURN` - Enter key
+- `VirtualKey.TAB` - Tab key
+- `VirtualKey.F1` through `VirtualKey.F12` - Function keys
+- `VirtualKey.A` through `VirtualKey.Z` - Letter keys
+- `VirtualKey.KEY_0` through `VirtualKey.KEY_9` - Number keys
+- `VirtualKey.W`, `VirtualKey.A`, `VirtualKey.S`, `VirtualKey.D` - WASD keys
+
+## Remarks
+
+- The key state is a combination field with ephemeral states consumed each frame
+- Check key state every frame if you need to detect when keys are held down
+- For detecting single key presses, track the previous state
+- The indexer returns the pressed state (bit 0 of the raw value)
+- Raw values include ephemeral states (key down, key up, short press) that are consumed each frame
+- Setting key states may be useful for simulating input, but use with caution
+- Not all virtual key codes are valid game input - use `IsVirtualKeyValid()` to check
+- Key state reflects the game's internal key buffer, not direct OS input

@@ -1,0 +1,287 @@
+---
+title: IToastGui
+description: Display and intercept native toast notifications
+---
+
+## Overview
+
+`IToastGui` facilitates interacting with and creating native toast windows. Toasts are the notification popups that appear in the game.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Events
+
+### Toast
+
+```csharp
+public event OnNormalToastDelegate Toast;
+```
+
+Fired when a toast is sent by the game or a plugin.
+
+<ParamField path="message" type="SeString">
+  The message displayed (ref parameter)
+</ParamField>
+
+<ParamField path="options" type="ToastOptions">
+  Assorted toast options (ref parameter)
+</ParamField>
+
+<ParamField path="isHandled" type="bool">
+  Whether the toast has been handled or should be propagated (ref parameter)
+</ParamField>
+
+### QuestToast
+
+```csharp
+public event OnQuestToastDelegate QuestToast;
+```
+
+Fired when a quest toast is sent by the game or a plugin.
+
+<ParamField path="message" type="SeString">
+  The message displayed (ref parameter)
+</ParamField>
+
+<ParamField path="options" type="QuestToastOptions">
+  Assorted quest toast options (ref parameter)
+</ParamField>
+
+<ParamField path="isHandled" type="bool">
+  Whether the toast has been handled or should be propagated (ref parameter)
+</ParamField>
+
+### ErrorToast
+
+```csharp
+public event OnErrorToastDelegate ErrorToast;
+```
+
+Fired when an error toast is sent by the game or a plugin.
+
+<ParamField path="message" type="SeString">
+  The message displayed (ref parameter)
+</ParamField>
+
+<ParamField path="isHandled" type="bool">
+  Whether the toast has been handled or should be propagated (ref parameter)
+</ParamField>
+
+## Methods
+
+### ShowNormal
+
+```csharp
+public void ShowNormal(string message, ToastOptions? options = null);
+public void ShowNormal(SeString message, ToastOptions? options = null);
+```
+
+Shows a toast message with the given content.
+
+<ParamField path="message" type="string | SeString" required>
+  The message to be shown
+</ParamField>
+
+<ParamField path="options" type="ToastOptions?">
+  Options for the toast (default: null)
+</ParamField>
+
+### ShowQuest
+
+```csharp
+public void ShowQuest(string message, QuestToastOptions? options = null);
+public void ShowQuest(SeString message, QuestToastOptions? options = null);
+```
+
+Shows a quest toast message with the given content.
+
+<ParamField path="message" type="string | SeString" required>
+  The message to be shown
+</ParamField>
+
+<ParamField path="options" type="QuestToastOptions?">
+  Options for the toast (default: null)
+</ParamField>
+
+### ShowError
+
+```csharp
+public void ShowError(string message);
+public void ShowError(SeString message);
+```
+
+Shows an error toast message with the given content.
+
+<ParamField path="message" type="string | SeString" required>
+  The message to be shown
+</ParamField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IToastGui toastGui;
+    
+    public MyPlugin(IToastGui toastGui)
+    {
+        this.toastGui = toastGui;
+        
+        // Subscribe to toast events
+        this.toastGui.Toast += OnToast;
+        this.toastGui.ErrorToast += OnErrorToast;
+    }
+    
+    private void OnToast(
+        ref SeString message,
+        ref ToastOptions options,
+        ref bool isHandled)
+    {
+        // Intercept and modify toasts
+        Log.Information($"Toast: {message.TextValue}");
+        
+        // Optionally prevent the toast from showing
+        if (message.TextValue.Contains("spam"))
+        {
+            isHandled = true;
+        }
+    }
+    
+    private void OnErrorToast(
+        ref SeString message,
+        ref bool isHandled)
+    {
+        Log.Warning($"Error toast: {message.TextValue}");
+    }
+    
+    public void ShowSuccessMessage()
+    {
+        this.toastGui.ShowNormal("Operation completed successfully!");
+    }
+    
+    public void ShowQuestUpdate(string questName)
+    {
+        var options = new QuestToastOptions
+        {
+            Position = QuestToastPosition.Centre,
+            Speed = QuestToastSpeed.Fast
+        };
+        
+        this.toastGui.ShowQuest($"Quest updated: {questName}", options);
+    }
+    
+    public void ShowErrorMessage(string error)
+    {
+        this.toastGui.ShowError($"Error: {error}");
+    }
+    
+    public void Dispose()
+    {
+        this.toastGui.Toast -= OnToast;
+        this.toastGui.ErrorToast -= OnErrorToast;
+    }
+}
+```
+
+## Advanced Usage
+
+### Custom Toast Options
+
+```csharp
+public void ShowCustomToast()
+{
+    var options = new ToastOptions
+    {
+        Speed = ToastSpeed.Slow,
+        Position = ToastPosition.Bottom
+    };
+    
+    this.toastGui.ShowNormal("This is a slow toast at the bottom", options);
+}
+```
+
+### Rich Text Toasts
+
+```csharp
+public void ShowRichToast()
+{
+    var message = new SeStringBuilder()
+        .AddUiForeground("Important: ", 500)
+        .AddText("This is a rich text toast!")
+        .Build();
+    
+    this.toastGui.ShowNormal(message);
+}
+```
+
+### Quest Toast Positioning
+
+```csharp
+public void ShowQuestToasts()
+{
+    // Center position
+    this.toastGui.ShowQuest(
+        "Quest objective updated",
+        new QuestToastOptions { Position = QuestToastPosition.Centre });
+    
+    // Top position
+    this.toastGui.ShowQuest(
+        "Quest completed!",
+        new QuestToastOptions
+        {
+            Position = QuestToastPosition.Top,
+            Speed = QuestToastSpeed.Fast
+        });
+}
+```
+
+### Filtering Toasts
+
+```csharp
+private readonly HashSet<string> blockedMessages = new()
+{
+    "You synthesize",
+    "You obtain"
+};
+
+private void OnToast(
+    ref SeString message,
+    ref ToastOptions options,
+    ref bool isHandled)
+{
+    var text = message.TextValue;
+    
+    foreach (var blocked in this.blockedMessages)
+    {
+        if (text.Contains(blocked, StringComparison.OrdinalIgnoreCase))
+        {
+            isHandled = true;
+            return;
+        }
+    }
+}
+```
+
+## Toast Types
+
+### Normal Toast
+Standard notification that appears in the center or bottom of the screen.
+
+### Quest Toast
+Larger notification typically used for quest updates, appears in the center or top of the screen.
+
+### Error Toast
+Error notification with distinctive styling, used for error messages.
+
+## Remarks
+
+- Always unsubscribe from events in your plugin's `Dispose()` method
+- Setting `isHandled = true` in event handlers prevents the toast from displaying
+- Toast options control positioning and animation speed
+- SeString allows for rich formatting including colors
+- Quest toasts have different positioning options than normal toasts
+- Toasts are queued and displayed in order

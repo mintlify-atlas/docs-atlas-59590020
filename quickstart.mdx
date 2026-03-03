@@ -1,80 +1,520 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quickstart: Your First Plugin"
+description: "Build a working Dalamud plugin in under 10 minutes"
 ---
 
-## Get started in three steps
+## What You'll Build
 
-Get your documentation site running locally and make your first customization.
+In this quickstart, you'll create a simple but functional Dalamud plugin that:
+- Registers a custom slash command (`/hello`)
+- Displays a configuration window using ImGui
+- Sends messages to the game chat
+- Demonstrates proper plugin lifecycle management
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+By the end, you'll have a solid foundation for building more complex plugins.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  This guide assumes you've already completed the [Installation](/installation) setup. If not, do that first!
+</Note>
+
+## Step 1: Create the Plugin Class
+
+Every Dalamud plugin must implement the `IDalamudPlugin` interface. This is the entry point for your plugin.
+
+<Steps>
+  <Step title="Create the Main Plugin File">
+    Create a new file called `Plugin.cs` with the following code:
+    
+    ```csharp Plugin.cs
+    using Dalamud.Game.Command;
+    using Dalamud.Interface.Windowing;
+    using Dalamud.Plugin;
+    using Dalamud.Plugin.Services;
+
+    namespace HelloWorldPlugin;
+
+    public class Plugin : IDalamudPlugin
+    {
+        private readonly IDalamudPluginInterface pluginInterface;
+        private readonly ICommandManager commandManager;
+        private readonly IChatGui chatGui;
+        private readonly WindowSystem windowSystem;
+        private readonly ConfigWindow configWindow;
+
+        public Plugin(
+            IDalamudPluginInterface pluginInterface,
+            ICommandManager commandManager,
+            IChatGui chatGui)
+        {
+            this.pluginInterface = pluginInterface;
+            this.commandManager = commandManager;
+            this.chatGui = chatGui;
+
+            // Create window system
+            this.windowSystem = new WindowSystem("HelloWorldPlugin");
+            this.configWindow = new ConfigWindow();
+            this.windowSystem.AddWindow(this.configWindow);
+
+            // Register command
+            this.commandManager.AddHandler("/hello", new CommandInfo(OnCommand)
+            {
+                HelpMessage = "Opens the Hello World plugin configuration."
+            });
+
+            // Hook up UI drawing
+            this.pluginInterface.UiBuilder.Draw += this.windowSystem.Draw;
+            this.pluginInterface.UiBuilder.OpenConfigUi += this.ToggleConfigWindow;
+        }
+
+        public void Dispose()
+        {
+            // Clean up resources
+            this.commandManager.RemoveHandler("/hello");
+            this.pluginInterface.UiBuilder.Draw -= this.windowSystem.Draw;
+            this.pluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigWindow;
+            this.windowSystem.RemoveAllWindows();
+        }
+
+        private void OnCommand(string command, string args)
+        {
+            this.chatGui.Print("Hello from your plugin!");
+            this.ToggleConfigWindow();
+        }
+
+        private void ToggleConfigWindow()
+        {
+            this.configWindow.Toggle();
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Understand the Code">
+    Let's break down what's happening:
+    
+    <AccordionGroup>
+      <Accordion icon="plug" title="Service Injection (Constructor)">
+        ```csharp
+        public Plugin(
+            IDalamudPluginInterface pluginInterface,
+            ICommandManager commandManager,
+            IChatGui chatGui)
+        ```
+        
+        Dalamud automatically injects services into your constructor. These are the APIs you'll use to interact with the game.
+        
+        - **`IDalamudPluginInterface`**: Core interface for plugin metadata, configuration, and UI
+        - **`ICommandManager`**: Registers custom slash commands
+        - **`IChatGui`**: Sends messages to the game chat
+      </Accordion>
+      
+      <Accordion icon="terminal" title="Command Registration">
+        ```csharp
+        this.commandManager.AddHandler("/hello", new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Opens the Hello World plugin configuration."
+        });
+        ```
+        
+        This registers the `/hello` command. When a player types it, the `OnCommand` method is called.
+      </Accordion>
+      
+      <Accordion icon="window" title="UI System">
+        ```csharp
+        this.windowSystem = new WindowSystem("HelloWorldPlugin");
+        this.pluginInterface.UiBuilder.Draw += this.windowSystem.Draw;
+        ```
+        
+        The `WindowSystem` manages all windows in your plugin. You hook into Dalamud's draw loop to render your UI.
+      </Accordion>
+      
+      <Accordion icon="trash" title="Resource Cleanup (Dispose)">
+        ```csharp
+        public void Dispose()
+        {
+            this.commandManager.RemoveHandler("/hello");
+            this.pluginInterface.UiBuilder.Draw -= this.windowSystem.Draw;
+            // ...
+        }
+        ```
+        
+        **Critical:** Always clean up registered commands, event handlers, and windows in `Dispose()`. This allows hot-reloading during development.
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+</Steps>
+
+## Step 2: Create the Configuration Window
+
+Now let's create the UI window that appears when you run `/hello`.
+
+<Steps>
+  <Step title="Create the Window Class">
+    Create a new file called `ConfigWindow.cs`:
+    
+    ```csharp ConfigWindow.cs
+    using System.Numerics;
+    using Dalamud.Interface.Windowing;
+    using ImGuiNET;
+
+    namespace HelloWorldPlugin;
+
+    public class ConfigWindow : Window
+    {
+        private string inputText = string.Empty;
+        private int counter = 0;
+
+        public ConfigWindow() : base("Hello World Configuration###HelloWorldConfig")
+        {
+            // Set window properties
+            this.Size = new Vector2(400, 300);
+            this.SizeCondition = ImGuiCond.FirstUseEver;
+        }
+
+        public override void Draw()
+        {
+            ImGui.Text("Welcome to your first Dalamud plugin!");
+            ImGui.Spacing();
+
+            // Input text field
+            ImGui.Text("Enter some text:");
+            ImGui.InputText("##input", ref this.inputText, 100);
+            ImGui.Spacing();
+
+            // Button with counter
+            if (ImGui.Button($"Click me! ({this.counter})"))
+            {
+                this.counter++;
+            }
+            ImGui.Spacing();
+
+            // Display entered text
+            if (!string.IsNullOrEmpty(this.inputText))
+            {
+                ImGui.TextColored(new Vector4(0, 1, 0, 1), $"You entered: {this.inputText}");
+            }
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Understand the Window Code">
+    <AccordionGroup>
+      <Accordion icon="browser" title="Window Properties">
+        ```csharp
+        this.Size = new Vector2(400, 300);
+        this.SizeCondition = ImGuiCond.FirstUseEver;
+        ```
+        
+        Set the initial window size. `ImGuiCond.FirstUseEver` means the size is only set on first display—users can resize it afterward.
+      </Accordion>
+      
+      <Accordion icon="paintbrush" title="ImGui Drawing">
+        ```csharp
+        public override void Draw()
+        {
+            ImGui.Text("Welcome to your first Dalamud plugin!");
+            ImGui.InputText("##input", ref this.inputText, 100);
+            // ...
+        }
+        ```
+        
+        The `Draw()` method is called every frame. Use ImGui functions to render UI elements:
+        - `ImGui.Text()` - Display text
+        - `ImGui.InputText()` - Text input field
+        - `ImGui.Button()` - Clickable button
+        - `ImGui.TextColored()` - Colored text
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+</Steps>
+
+## Step 3: Build and Test
+
+<Steps>
+  <Step title="Build the Project">
+    Open a terminal in your plugin directory and run:
+    
+    ```bash
+    dotnet build
+    ```
+    
+    You should see output like:
+    ```
+    Build succeeded.
+        0 Warning(s)
+        0 Error(s)
+    ```
+    
+    <Warning>
+      If you get compilation errors, double-check that:
+      - The `DalamudLibPath` in your `.csproj` is correct
+      - You've installed the .NET 8.0 SDK
+      - All using statements are present
+    </Warning>
+  </Step>
+  
+  <Step title="Load the Plugin In-Game">
+    1. Launch FFXIV via **XIVLauncher** (not the official launcher)
+    2. Press `Escape` and click **Plugin Installer**, or type `/xlplugins`
+    3. Go to the **Dev Plugins** tab
+    4. If your plugin isn't listed, click **Add** and browse to `bin\Debug\`
+    5. Click **Load** next to your plugin
+  </Step>
+  
+  <Step title="Test the Command">
+    In the game chat, type:
+    
+    ```
+    /hello
+    ```
+    
+    You should see:
+    - A chat message: "Hello from your plugin!"
+    - Your configuration window appears with a text input and clickable button
+  </Step>
+  
+  <Step title="Interact with the UI">
+    Try these interactions:
+    - Type something in the text input field
+    - Click the "Click me!" button and watch the counter increment
+    - Close and reopen the window with `/hello`
+    - Open plugin settings via `/xlplugins` → Click the settings icon next to your plugin
+  </Step>
+</Steps>
+
+## Step 4: Add Configuration Persistence
+
+Let's save the counter value so it persists between game sessions.
+
+<Steps>
+  <Step title="Create a Configuration Class">
+    Create `Configuration.cs`:
+    
+    ```csharp Configuration.cs
+    using Dalamud.Configuration;
+    using System;
+
+    namespace HelloWorldPlugin;
+
+    [Serializable]
+    public class Configuration : IPluginConfiguration
+    {
+        public int Version { get; set; } = 0;
+        public int SavedCounter { get; set; } = 0;
+
+        public void Save(IDalamudPluginInterface pluginInterface)
+        {
+            pluginInterface.SavePluginConfig(this);
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Update the Plugin Class">
+    Modify `Plugin.cs` to load and save configuration:
+    
+    ```csharp Plugin.cs
+    public class Plugin : IDalamudPlugin
+    {
+        private readonly Configuration config;
+        // ... other fields ...
+
+        public Plugin(
+            IDalamudPluginInterface pluginInterface,
+            ICommandManager commandManager,
+            IChatGui chatGui)
+        {
+            this.pluginInterface = pluginInterface;
+            this.commandManager = commandManager;
+            this.chatGui = chatGui;
+
+            // Load configuration
+            this.config = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
+            // Create window with config
+            this.windowSystem = new WindowSystem("HelloWorldPlugin");
+            this.configWindow = new ConfigWindow(this.config, pluginInterface);
+            this.windowSystem.AddWindow(this.configWindow);
+
+            // ... rest of initialization ...
+        }
+
+        // ... rest of class ...
+    }
+    ```
+  </Step>
+  
+  <Step title="Update the Window Class">
+    Modify `ConfigWindow.cs` to use the configuration:
+    
+    ```csharp ConfigWindow.cs
+    public class ConfigWindow : Window
+    {
+        private readonly Configuration config;
+        private readonly IDalamudPluginInterface pluginInterface;
+        private string inputText = string.Empty;
+
+        public ConfigWindow(Configuration config, IDalamudPluginInterface pluginInterface) 
+            : base("Hello World Configuration###HelloWorldConfig")
+        {
+            this.config = config;
+            this.pluginInterface = pluginInterface;
+            this.Size = new Vector2(400, 300);
+            this.SizeCondition = ImGuiCond.FirstUseEver;
+        }
+
+        public override void Draw()
+        {
+            ImGui.Text("Welcome to your first Dalamud plugin!");
+            ImGui.Spacing();
+
+            ImGui.Text("Enter some text:");
+            ImGui.InputText("##input", ref this.inputText, 100);
+            ImGui.Spacing();
+
+            // Button with saved counter
+            if (ImGui.Button($"Click me! ({this.config.SavedCounter})"))
+            {
+                this.config.SavedCounter++;
+                this.config.Save(this.pluginInterface);
+            }
+            ImGui.Spacing();
+
+            if (!string.IsNullOrEmpty(this.inputText))
+            {
+                ImGui.TextColored(new Vector4(0, 1, 0, 1), $"You entered: {this.inputText}");
+            }
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Test Persistence">
+    1. Rebuild: `dotnet build`
+    2. Unload and reload your plugin in `/xlplugins`
+    3. Click the button a few times
+    4. Completely close and restart the game
+    5. Load your plugin again—the counter should remember its value!
+  </Step>
+</Steps>
+
+<Tip>
+  Configuration files are stored at:
+  ```
+  %AppData%\XIVLauncher\pluginConfigs\YourPluginInternalName\
+  ```
+</Tip>
+
+## What's Next?
+
+Congratulations! You've built a fully functional Dalamud plugin. Here's where to go from here:
+
+<CardGroup cols={2}>
+  <Card title="Plugin Development Guide" icon="book" href="/plugin-dev/getting-started">
+    Learn advanced plugin patterns and best practices
+  </Card>
+  <Card title="UI & ImGui" icon="window" href="/ui/ui-builder">
+    Master custom UI development with ImGui
+  </Card>
+  <Card title="Game Integration" icon="gamepad" href="/game/client-state">
+    Access player state, targets, and game data
+  </Card>
+  <Card title="IPC System" icon="share-nodes" href="/ipc/overview">
+    Enable inter-plugin communication
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+Here are some useful patterns you'll use frequently:
+
+### Accessing Player Information
+
+```csharp
+public Plugin(IClientState clientState)
+{
+    var player = clientState.LocalPlayer;
+    if (player != null)
+    {
+        var name = player.Name.TextValue;
+        var level = player.Level;
+        var currentHP = player.CurrentHp;
+    }
+}
+```
+
+### Handling Chat Messages
+
+```csharp
+public Plugin(IChatGui chatGui)
+{
+    chatGui.ChatMessage += OnChatMessage;
+}
+
+private void OnChatMessage(
+    XivChatType type,
+    int timestamp,
+    ref SeString sender,
+    ref SeString message,
+    ref bool isHandled)
+{
+    var messageText = message.TextValue;
+    if (messageText.Contains("hello"))
+    {
+        chatGui.Print("I saw you say hello!");
+    }
+}
+```
+
+### Querying Game Data
+
+```csharp
+public Plugin(IDataManager dataManager)
+{
+    var itemSheet = dataManager.GetExcelSheet<Item>();
+    var potion = itemSheet?.GetRow(4564); // Potion item ID
+    if (potion != null)
+    {
+        var itemName = potion.Name.ToString();
+    }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion icon="circle-xmark" title="Plugin won't load">
+    **Check the logs:**
+    
+    Type `/xllog` in-game or check:
+    ```
+    %AppData%\XIVLauncher\dalamud.log
+    ```
+    
+    Common issues:
+    - Missing `IDalamudPlugin` implementation
+    - Constructor parameter types don't match available services
+    - Exception thrown during initialization
+  </Accordion>
+  
+  <Accordion icon="circle-xmark" title="Command doesn't work">
+    Make sure:
+    - The command starts with `/`
+    - You called `AddHandler()` before the plugin finished loading
+    - You're not removing the handler too early
+    - The command name doesn't conflict with existing commands
+  </Accordion>
+  
+  <Accordion icon="circle-xmark" title="Window doesn't appear">
+    Verify:
+    - `UiBuilder.Draw` event is subscribed
+    - `windowSystem.Draw()` is called in the handler
+    - Window's `IsOpen` property is set to `true`
+    - No exceptions are being thrown in `Draw()`
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  For more help, join the [Dalamud Discord](https://discord.gg/3NMcUV5) and ask in the `#plugin-dev` channel!
 </Note>

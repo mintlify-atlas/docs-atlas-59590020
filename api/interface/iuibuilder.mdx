@@ -1,0 +1,345 @@
+---
+title: 'IUiBuilder'
+description: 'Interface for drawing custom UI on top of the game using ImGui'
+icon: 'window'
+---
+
+## Overview
+
+The `IUiBuilder` interface represents the Dalamud UI that is drawn on top of the game. It can be used to draw custom windows and overlays using ImGui.
+
+**Namespace:** `Dalamud.Interface`
+
+**Assembly:** Dalamud.dll
+
+## Events
+
+<ResponseField name="Draw" type="event Action?">
+  The event that gets called when Dalamud is ready to draw your windows or overlays. When it is called, you can use static ImGui calls.
+
+  ```csharp
+  uiBuilder.Draw += OnDraw;
+
+  private void OnDraw()
+  {
+      ImGui.Begin("My Window");
+      ImGui.Text("Hello, world!");
+      ImGui.End();
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="ResizeBuffers" type="event Action?">
+  The event that is called when the game's DirectX device is requesting you to resize your buffers.
+</ResponseField>
+
+<ResponseField name="OpenConfigUi" type="event Action?">
+  Event that is fired when the plugin should open its configuration interface.
+
+  This event is triggered when users click on the plugin's settings button in the plugin installer.
+</ResponseField>
+
+<ResponseField name="OpenMainUi" type="event Action?">
+  Event that is fired when the plugin should open its main interface.
+
+  This event is triggered when users click on the plugin in the plugin installer.
+</ResponseField>
+
+<ResponseField name="ShowUi" type="event Action?">
+  An action that is called when plugin UI or interface modifications are supposed to be shown. These may be fired consecutively.
+</ResponseField>
+
+<ResponseField name="HideUi" type="event Action?">
+  An action that is called when plugin UI or interface modifications are supposed to be hidden. These may be fired consecutively.
+</ResponseField>
+
+<ResponseField name="DefaultGlobalScaleChanged" type="event Action?">
+  Event fired when the default global scale changes.
+</ResponseField>
+
+<ResponseField name="DefaultFontChanged" type="event Action?">
+  Event fired when the default font changes.
+</ResponseField>
+
+<ResponseField name="DefaultStyleChanged" type="event Action?">
+  Event fired when the default style changes.
+</ResponseField>
+
+## Properties
+
+### Font Handles
+
+<ResponseField name="DefaultFontHandle" type="IFontHandle">
+  Gets the handle to the default Dalamud font - supporting all game languages and icons.
+
+  ```csharp
+  // To create a matching font handle:
+  var fontHandle = fontAtlas.NewDelegateFontHandle(
+      e => e.OnPreBuild(
+          tk => tk.AddDalamudDefaultFont(UiBuilder.DefaultFontSizePx)));
+  ```
+</ResponseField>
+
+<ResponseField name="IconFontHandle" type="IFontHandle">
+  Gets the default Dalamud icon font based on FontAwesome 5 Free solid.
+
+  ```csharp
+  // To create a matching font handle:
+  var fontHandle = fontAtlas.NewDelegateFontHandle(
+      e => e.OnPreBuild(
+          tk => tk.AddFontAwesomeIconFont(new() { SizePx = UiBuilder.DefaultFontSizePx })));
+  ```
+</ResponseField>
+
+<ResponseField name="MonoFontHandle" type="IFontHandle">
+  Gets the default Dalamud monospaced font based on Inconsolata Regular.
+
+  ```csharp
+  // To create a matching font handle:
+  var fontHandle = fontAtlas.NewDelegateFontHandle(
+      e => e.OnPreBuild(
+          tk => tk.AddDalamudAssetFont(
+              DalamudAsset.InconsolataRegular,
+              new() { SizePx = UiBuilder.DefaultFontSizePx })));
+  ```
+</ResponseField>
+
+<ResponseField name="IconFontFixedWidthHandle" type="IFontHandle">
+  Gets the default Dalamud icon font based on FontAwesome 5 free solid with a fixed width and vertically centered glyphs.
+</ResponseField>
+
+### Font Properties
+
+<ResponseField name="DefaultFontSpec" type="IFontSpec">
+  Gets the default font specifications.
+</ResponseField>
+
+<ResponseField name="FontDefaultSizePt" type="float">
+  Gets the default Dalamud font size in points.
+</ResponseField>
+
+<ResponseField name="FontDefaultSizePx" type="float">
+  Gets the default Dalamud font size in pixels.
+</ResponseField>
+
+<ResponseField name="FontDefault" type="ImFontPtr">
+  Gets the default Dalamud font - supporting all game languages and icons.
+
+  <Warning>
+    Accessing this property outside of the `Draw` event is dangerous and not supported.
+  </Warning>
+</ResponseField>
+
+<ResponseField name="FontIcon" type="ImFontPtr">
+  Gets the default Dalamud icon font based on FontAwesome 5 Free solid.
+
+  <Warning>
+    Accessing this property outside of the `Draw` event is dangerous and not supported.
+  </Warning>
+</ResponseField>
+
+<ResponseField name="FontMono" type="ImFontPtr">
+  Gets the default Dalamud monospaced font based on Inconsolata Regular.
+
+  <Warning>
+    Accessing this property outside of the `Draw` event is dangerous and not supported.
+  </Warning>
+</ResponseField>
+
+### Device and Window
+
+<ResponseField name="DeviceHandle" type="nint">
+  Gets the game's active Direct3D device.
+
+  Returns a pointer to the instance of `IUnknown` that the game is using and should be containing an `ID3D11Device`, or `0` if it is not available yet.
+
+  Use [QueryInterface](https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-queryinterface) with IID of `IID_ID3D11Device` if you want to ensure that the interface type contained within is indeed an instance of `ID3D11Device`.
+</ResponseField>
+
+<ResponseField name="WindowHandlePtr" type="nint">
+  Gets the game's main window handle.
+
+  Returns the HWND of the main game window, or `0` if it is not available yet.
+</ResponseField>
+
+### UI Visibility Settings
+
+<ResponseField name="DisableAutomaticUiHide" type="bool">
+  Gets or sets a value indicating whether this plugin should hide its UI automatically when the game's UI is hidden.
+
+  Default: `false`
+</ResponseField>
+
+<ResponseField name="DisableUserUiHide" type="bool">
+  Gets or sets a value indicating whether this plugin should hide its UI automatically when the user toggles the UI.
+
+  Default: `false`
+</ResponseField>
+
+<ResponseField name="DisableCutsceneUiHide" type="bool">
+  Gets or sets a value indicating whether this plugin should hide its UI automatically during cutscenes.
+
+  Default: `false`
+</ResponseField>
+
+<ResponseField name="DisableGposeUiHide" type="bool">
+  Gets or sets a value indicating whether this plugin should hide its UI automatically while gpose is active.
+
+  Default: `false`
+</ResponseField>
+
+<ResponseField name="OverrideGameCursor" type="bool">
+  Gets or sets a value indicating whether the game's cursor should be overridden with the ImGui cursor.
+
+  Default: `false`
+</ResponseField>
+
+### State Properties
+
+<ResponseField name="FrameCount" type="ulong">
+  Gets the count of Draw calls made since plugin creation.
+</ResponseField>
+
+<ResponseField name="CutsceneActive" type="bool">
+  Gets a value indicating whether a cutscene is playing.
+</ResponseField>
+
+<ResponseField name="ShouldModifyUi" type="bool">
+  Gets a value indicating whether this plugin should modify the game's interface at this time.
+</ResponseField>
+
+<ResponseField name="UiPrepared" type="bool">
+  Gets a value indicating whether UI functions can be used.
+</ResponseField>
+
+<ResponseField name="FontAtlas" type="IFontAtlas">
+  Gets the plugin-private font atlas.
+</ResponseField>
+
+<ResponseField name="ShouldUseReducedMotion" type="bool">
+  Gets a value indicating whether to use "reduced motion". This usually means that you should use less intrusive animations, or disable them entirely.
+</ResponseField>
+
+<ResponseField name="PluginUISoundEffectsEnabled" type="bool">
+  Gets a value indicating whether the user has enabled the "Enable sound effects for plugin windows" setting.
+
+  This setting is effected by the in-game "System Sounds" option and volume.
+</ResponseField>
+
+## Methods
+
+<ResponseField name="LoadUld" type="UldWrapper">
+  Loads an ULD file that can load textures containing multiple icons in a single texture.
+
+  **Parameters:**
+  - `uldPath` (string) - The path of the requested ULD file.
+
+  **Returns:** A wrapper around said ULD file.
+
+  ```csharp
+  var uldWrapper = uiBuilder.LoadUld("ui/uld/someicon.uld");
+  ```
+</ResponseField>
+
+<ResponseField name="WaitForUi" type="Task">
+  Waits for UI to become available for use.
+
+  **Returns:** A task that completes when the game's Present has been called at least once.
+
+  ```csharp
+  await uiBuilder.WaitForUi();
+  ```
+</ResponseField>
+
+<ResponseField name="RunWhenUiPrepared<T>" type="Task<T>">
+  Waits for UI to become available for use, then runs a function.
+
+  **Parameters:**
+  - `func` (Func\<T\> or Func\<Task\<T\>\>) - Function to call.
+  - `runInFrameworkThread` (bool) - Specifies whether to call the function from the framework thread. Default: `false`
+
+  **Returns:** A task that completes when the game's Present has been called at least once.
+
+  ```csharp
+  var result = await uiBuilder.RunWhenUiPrepared(() => DoSomething());
+  ```
+</ResponseField>
+
+<ResponseField name="CreateFontAtlas" type="IFontAtlas">
+  Creates an isolated `IFontAtlas`.
+
+  **Parameters:**
+  - `autoRebuildMode` (FontAtlasAutoRebuildMode) - Specify when and how to rebuild this atlas.
+  - `isGlobalScaled` (bool) - Whether the fonts in the atlas is global scaled. Default: `true`
+  - `debugName` (string?) - Name for debugging purposes. Default: `null`
+
+  **Returns:** A new instance of `IFontAtlas`.
+
+  Use this to create extra font atlases, if you want to create and dispose fonts without having to rebuild all other fonts together.
+
+  If `autoRebuildMode` is not `FontAtlasAutoRebuildMode.OnNewFrame`, the font rebuilding functions must be called manually.
+
+  ```csharp
+  var fontAtlas = uiBuilder.CreateFontAtlas(
+      FontAtlasAutoRebuildMode.Async,
+      isGlobalScaled: true,
+      debugName: "MyCustomAtlas");
+  ```
+</ResponseField>
+
+## Usage Example
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IUiBuilder uiBuilder;
+    private bool isVisible = false;
+
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        this.uiBuilder = pluginInterface.UiBuilder;
+        
+        // Subscribe to draw event
+        this.uiBuilder.Draw += OnDraw;
+        
+        // Subscribe to config UI event
+        this.uiBuilder.OpenConfigUi += OnOpenConfigUi;
+        
+        // Configure UI behavior
+        this.uiBuilder.DisableCutsceneUiHide = true;
+    }
+
+    private void OnDraw()
+    {
+        if (!isVisible) return;
+
+        ImGui.Begin("My Plugin Window", ref isVisible);
+        ImGui.Text("Hello from my plugin!");
+        
+        // Use custom font
+        using (uiBuilder.MonoFontHandle.Push())
+        {
+            ImGui.Text("This is in monospace font");
+        }
+        
+        ImGui.End();
+    }
+
+    private void OnOpenConfigUi()
+    {
+        isVisible = true;
+    }
+
+    public void Dispose()
+    {
+        this.uiBuilder.Draw -= OnDraw;
+        this.uiBuilder.OpenConfigUi -= OnOpenConfigUi;
+    }
+}
+```
+
+## See Also
+
+- [IFontHandle](/api/interface/ifonthandle) - Font handle interface
+- [ITextureProvider](/api/interface/itextureprovider) - Texture provider service
+- [ImGui Documentation](https://github.com/ocornut/imgui) - ImGui library reference

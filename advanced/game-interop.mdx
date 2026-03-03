@@ -1,0 +1,490 @@
+---
+title: 'Game Interop Provider'
+description: 'Unified interface for hooks, signatures, and game memory interaction'
+icon: 'arrows-turn-to-dots'
+---
+
+## Overview
+
+The `IGameInteropProvider` service is the recommended high-level interface for interacting with game memory. It provides a unified way to create hooks, resolve signatures, and manage the lifecycle of game interop operations.
+
+## Getting Started
+
+### Basic Usage
+
+```csharp
+using Dalamud.Plugin.Services;
+using Dalamud.Hooking;
+using Dalamud.Utility.Signatures;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IGameInteropProvider gameInterop;
+    
+    public MyPlugin(IGameInteropProvider gameInterop)
+    {
+        this.gameInterop = gameInterop;
+    }
+    
+    public void Initialize()
+    {
+        // Use InitializeFromAttributes for all [Signature] fields
+        this.gameInterop.InitializeFromAttributes(this);
+    }
+}
+```
+
+## InitializeFromAttributes
+
+The most powerful feature of IGameInteropProvider is automatic initialization of signature-decorated members:
+
+```csharp
+public class GameInteraction
+{
+    // Automatically resolved addresses
+    [Signature("48 8D 0D ?? ?? ?? ??", ScanType = ScanType.StaticAddress)]
+    private readonly nint playerDataPointer;
+    
+    // Automatically created delegates
+    private delegate nint GetPlayerDelegate(nint playerObj);
+    
+    [Signature("E8 ?? ?? ?? ?? 48 85 C0 74 ??")]
+    private readonly GetPlayerDelegate? getPlayer;
+    
+    // Automatically created hooks
+    private delegate void UpdateDelegate(nint obj, float deltaTime);
+    
+    [Signature(
+        "40 53 48 83 EC 20 F3 0F",
+        DetourName = nameof(UpdateDetour)
+    )]
+    private Hook<UpdateDelegate>? updateHook;
+    
+    public void Initialize(IGameInteropProvider interop)
+    {
+        // One call resolves everything
+        interop.InitializeFromAttributes(this);
+        
+        // Enable hooks
+        this.updateHook?.Enable();
+    }
+    
+    private void UpdateDetour(nint obj, float deltaTime)
+    {
+        PluginLog.Debug($"Update called: dt={deltaTime}");
+        this.updateHook!.Original(obj, deltaTime);
+    }
+    
+    public void Dispose()
+    {
+        this.updateHook?.Dispose();
+    }
+}
+```
+
+### Supported Member Types
+
+InitializeFromAttributes can handle:
+
+1. **IntPtr/nint fields**: Resolved signature addresses
+2. **Delegate fields**: Function pointers as callable delegates
+3. **Hook fields**: Automatically created hooks with detours
+
+```csharp
+public class AttributeExamples
+{
+    // Type 1: Raw address
+    [Signature("48 8B 05 ?? ?? ?? ??")]
+    private nint functionAddress;
+    
+    // Type 2: Delegate
+    private delegate void MyFunctionDelegate(int param);
+    
+    [Signature("40 53 48 83 EC 20")]
+    private MyFunctionDelegate? myFunction;
+    
+    // Type 3: Hook
+    [Signature("E8 ?? ?? ?? ??", DetourName = nameof(MyDetour))]
+    private Hook<MyFunctionDelegate>? myHook;
+    
+    private void MyDetour(int param)
+    {
+        myHook!.Original(param);
+    }
+}
+```
+
+## Creating Hooks
+
+### HookFromAddress
+
+Create a hook from a memory address:
+
+```csharp
+public class HookExample
+{
+    private delegate void SomeDelegate(nint param);
+    private Hook<SomeDelegate>? myHook;
+    
+    public void CreateHook(IGameInteropProvider interop, nint address)
+    {
+        this.myHook = interop.HookFromAddress<SomeDelegate>(
+            address,
+            this.Detour
+        );
+        
+        this.myHook.Enable();
+    }
+    
+    private void Detour(nint param)
+    {
+        PluginLog.Info($"Hooked: {param:X}");
+        this.myHook!.Original(param);
+    }
+}
+```
+
+### HookFromSignature
+
+Create a hook directly from a signature:
+
+```csharp
+public void CreateFromSignature(IGameInteropProvider interop)
+{
+    var signature = "E8 ?? ?? ?? ?? 48 8B 4C 24 ??";
+    
+    this.myHook = interop.HookFromSignature<SomeDelegate>(
+        signature,
+        this.Detour
+    );
+    
+    this.myHook.Enable();
+}
+```
+
+### HookFromSymbol
+
+Hook exported functions from DLLs:
+
+```csharp
+private delegate int SendDelegate(
+    nint socket,
+    nint buffer,
+    int length,
+    int flags
+);
+
+public void HookWinSock(IGameInteropProvider interop)
+{
+    var hook = interop.HookFromSymbol<SendDelegate>(
+        "ws2_32.dll",
+        "send",
+        this.SendDetour
+    );
+    
+    hook.Enable();
+}
+
+private int SendDetour(nint socket, nint buffer, int length, int flags)
+{
+    PluginLog.Info($"Sending {length} bytes");
+    return this.myHook!.Original(socket, buffer, length, flags);
+}
+```
+
+### HookFromImport
+
+Hook via import table:
+
+```csharp
+using System.Diagnostics;
+
+public void HookImport(IGameInteropProvider interop)
+{
+    var module = Process.GetCurrentProcess().MainModule;
+    
+    var hook = interop.HookFromImport<SendDelegate>(
+        module,
+        "ws2_32.dll",
+        "send",
+        0, // hint/ordinal
+        this.SendDetour
+    );
+    
+    hook.Enable();
+}
+```
+
+### HookFromFunctionPointerVariable
+
+Hook by replacing a function pointer variable:
+
+```csharp
+public void HookPointerVariable(IGameInteropProvider interop, nint ptrAddress)
+{
+    var hook = interop.HookFromFunctionPointerVariable<SomeDelegate>(
+        ptrAddress,
+        this.Detour
+    );
+    
+    hook.Enable();
+}
+```
+
+## Hook Backends
+
+Choose between Reloaded (default) and MinHook:
+
+```csharp
+public void ChooseBackend(IGameInteropProvider interop, nint address)
+{
+    // Automatic (recommended)
+    var hook1 = interop.HookFromAddress<SomeDelegate>(
+        address,
+        this.Detour,
+        IGameInteropProvider.HookBackend.Automatic
+    );
+    
+    // Explicitly use Reloaded
+    var hook2 = interop.HookFromAddress<SomeDelegate>(
+        address,
+        this.Detour,
+        IGameInteropProvider.HookBackend.Reloaded
+    );
+    
+    // Use MinHook (only if Reloaded doesn't work)
+    var hook3 = interop.HookFromAddress<SomeDelegate>(
+        address,
+        this.Detour,
+        IGameInteropProvider.HookBackend.MinHook
+    );
+}
+```
+
+<Note>
+Always prefer HookBackend.Automatic or HookBackend.Reloaded unless you have a specific reason to use MinHook.
+</Note>
+
+## Complete Example
+
+Here's a complete plugin using IGameInteropProvider:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using Dalamud.Hooking;
+using Dalamud.Utility.Signatures;
+
+public class MyPlugin : IDalamudPlugin
+{
+    public string Name => "My Plugin";
+    
+    private readonly IGameInteropProvider gameInterop;
+    
+    // Static data addresses
+    [Signature(
+        "48 8D 0D ?? ?? ?? ??",
+        ScanType = ScanType.StaticAddress
+    )]
+    private readonly nint localPlayerPointer;
+    
+    [Signature(
+        "48 8B 05 ?? ?? ?? ??",
+        ScanType = ScanType.StaticAddress
+    )]
+    private readonly nint targetManagerPointer;
+    
+    // Function pointers as delegates
+    private delegate nint GetTargetDelegate(nint targetManager);
+    
+    [Signature("E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 74 ??")]
+    private readonly GetTargetDelegate? getTarget;
+    
+    // Hooks
+    private delegate void UpdatePlayerDelegate(nint player, float deltaTime);
+    
+    [Signature(
+        "40 53 48 83 EC 20 0F 29 74 24",
+        DetourName = nameof(UpdatePlayerDetour)
+    )]
+    private Hook<UpdatePlayerDelegate>? updatePlayerHook;
+    
+    [Signature(
+        "48 89 5C 24 08 48 89 74 24",
+        DetourName = nameof(ProcessActionDetour),
+        Fallibility = Fallibility.Fallible
+    )]
+    private Hook<ProcessActionDelegate>? processActionHook;
+    
+    private delegate void ProcessActionDelegate(nint manager, int actionId);
+    
+    public MyPlugin(
+        DalamudPluginInterface pluginInterface,
+        IGameInteropProvider gameInterop)
+    {
+        this.gameInterop = gameInterop;
+        
+        // Initialize all [Signature] members
+        this.gameInterop.InitializeFromAttributes(this);
+        
+        // Enable hooks
+        this.updatePlayerHook?.Enable();
+        this.processActionHook?.Enable();
+        
+        // Use resolved addresses and delegates
+        this.CheckTarget();
+    }
+    
+    private void CheckTarget()
+    {
+        if (this.getTarget != null)
+        {
+            var target = this.getTarget(this.targetManagerPointer);
+            PluginLog.Info($"Current target: {target:X}");
+        }
+    }
+    
+    private void UpdatePlayerDetour(nint player, float deltaTime)
+    {
+        // Custom logic
+        if (player == this.localPlayerPointer)
+        {
+            PluginLog.Verbose($"Player update: dt={deltaTime:F3}");
+        }
+        
+        // Call original
+        this.updatePlayerHook!.Original(player, deltaTime);
+    }
+    
+    private void ProcessActionDetour(nint manager, int actionId)
+    {
+        PluginLog.Info($"Action used: {actionId}");
+        
+        try
+        {
+            // Your custom logic
+            this.HandleAction(actionId);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex, "Error in action processing");
+        }
+        
+        // Always call original
+        this.processActionHook!.Original(manager, actionId);
+    }
+    
+    private void HandleAction(int actionId)
+    {
+        // Custom action handling
+    }
+    
+    public void Dispose()
+    {
+        this.updatePlayerHook?.Dispose();
+        this.processActionHook?.Dispose();
+    }
+}
+```
+
+## Best Practices
+
+### Organization
+
+Group related signatures in separate classes:
+
+```csharp
+public class PlayerFunctions
+{
+    [Signature("48 8D 0D ?? ?? ?? ??", ScanType = ScanType.StaticAddress)]
+    public readonly nint LocalPlayerAddress;
+    
+    private delegate void UpdateDelegate(nint player, float dt);
+    
+    [Signature("40 53 48 83 EC 20", DetourName = nameof(UpdateDetour))]
+    private Hook<UpdateDelegate>? updateHook;
+    
+    public void Initialize(IGameInteropProvider interop)
+    {
+        interop.InitializeFromAttributes(this);
+        this.updateHook?.Enable();
+    }
+    
+    private void UpdateDetour(nint player, float dt)
+    {
+        this.updateHook!.Original(player, dt);
+    }
+    
+    public void Dispose()
+    {
+        this.updateHook?.Dispose();
+    }
+}
+
+public class CombatFunctions
+{
+    // Combat-related signatures and hooks
+}
+```
+
+### Error Handling
+
+Use fallible signatures for optional features:
+
+```csharp
+public class OptionalFeatures
+{
+    [Signature(
+        "E8 ?? ?? ?? ??",
+        Fallibility = Fallibility.Fallible
+    )]
+    private readonly nint? experimentalFunction;
+    
+    public void Initialize(IGameInteropProvider interop)
+    {
+        interop.InitializeFromAttributes(this);
+        
+        if (this.experimentalFunction.HasValue)
+        {
+            PluginLog.Info("Experimental feature available");
+        }
+        else
+        {
+            PluginLog.Warning("Experimental feature not found");
+        }
+    }
+}
+```
+
+### Initialization Order
+
+Initialize dependencies in the correct order:
+
+```csharp
+public class MyPlugin
+{
+    public MyPlugin(IGameInteropProvider interop)
+    {
+        // 1. Initialize attributes first
+        interop.InitializeFromAttributes(this);
+        
+        // 2. Validate critical addresses
+        if (this.criticalAddress == nint.Zero)
+        {
+            throw new Exception("Failed to find critical signature");
+        }
+        
+        // 3. Enable hooks
+        this.myHook?.Enable();
+        
+        // 4. Use resolved addresses
+        this.SetupWithAddresses();
+    }
+}
+```
+
+## Related Topics
+
+- [Function Hooking](/advanced/hooking) - Detailed hook usage
+- [Signature Scanning](/advanced/signatures) - Understanding signatures
+- [Client Structs](/advanced/client-structs) - Game structure definitions

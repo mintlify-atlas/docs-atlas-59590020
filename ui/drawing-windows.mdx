@@ -1,0 +1,554 @@
+---
+title: Drawing Windows
+description: Using the WindowSystem to create and manage ImGui windows
+---
+
+The `WindowSystem` provides a structured approach to managing multiple ImGui windows in your plugin. Instead of manually handling window state and rendering, you create `Window` classes that the system automatically manages.
+
+## WindowSystem Overview
+
+The `WindowSystem` class manages a collection of windows and handles their lifecycle, focus management, and rendering.
+
+```csharp
+using Dalamud.Interface.Windowing;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private WindowSystem WindowSystem { get; init; }
+    
+    public MyPlugin(DalamudPluginInterface pluginInterface)
+    {
+        // Create a window system with a unique namespace
+        this.WindowSystem = new WindowSystem("MyPlugin_Windows");
+        
+        // Add windows to the system
+        this.WindowSystem.AddWindow(new MainWindow());
+        this.WindowSystem.AddWindow(new ConfigWindow());
+        
+        // Hook up the Draw event
+        pluginInterface.UiBuilder.Draw += this.WindowSystem.Draw;
+    }
+    
+    public void Dispose()
+    {
+        this.WindowSystem.RemoveAllWindows();
+    }
+}
+```
+
+## Creating a Window
+
+Extend the `Window` base class to create custom windows:
+
+```csharp
+using Dalamud.Interface.Windowing;
+
+public class MainWindow : Window
+{
+    public MainWindow() : base("My Plugin Main Window")
+    {
+        // Set window properties
+        this.Size = new Vector2(400, 300);
+        this.SizeCondition = ImGuiCond.FirstUseEver;
+        
+        this.Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+    }
+    
+    public override void Draw()
+    {
+        // ImGui.Begin() is already called for you
+        ImGui.Text("Hello from the main window!");
+        
+        if (ImGui.Button("Click me"))
+        {
+            // Handle button click
+        }
+        // ImGui.End() is called automatically
+    }
+}
+```
+
+<Note>
+  The Window base class handles `ImGui.Begin()` and `ImGui.End()` automatically. Only implement your window content in the `Draw()` method.
+</Note>
+
+## Window Properties
+
+### Window Name and ID
+
+The window name is set in the constructor. Use `###` to append a unique ID:
+
+```csharp
+public MainWindow() : base("Main Window###MyPluginMain")
+{
+    // The window title shows "Main Window"
+    // The internal ID is "MyPluginMain"
+}
+```
+
+### Position and Size
+
+Control window placement and dimensions:
+
+```csharp
+public ConfigWindow() : base("Configuration")
+{
+    // Set initial size
+    this.Size = new Vector2(500, 400);
+    this.SizeCondition = ImGuiCond.FirstUseEver;
+    
+    // Set initial position
+    this.Position = new Vector2(100, 100);
+    this.PositionCondition = ImGuiCond.Appearing;
+    
+    // Set size constraints
+    this.SizeConstraints = new WindowSizeConstraints
+    {
+        MinimumSize = new Vector2(300, 200),
+        MaximumSize = new Vector2(1920, 1080)
+    };
+}
+```
+
+### Window Flags
+
+Customize window behavior with `ImGuiWindowFlags`:
+
+```csharp
+public OverlayWindow() : base("Overlay")
+{
+    this.Flags = ImGuiWindowFlags.NoTitleBar
+               | ImGuiWindowFlags.NoScrollbar
+               | ImGuiWindowFlags.NoResize
+               | ImGuiWindowFlags.NoMove
+               | ImGuiWindowFlags.NoBackground;
+    
+    // Force window to stay in main game window
+    this.ForceMainWindow = true;
+}
+```
+
+### Background Alpha
+
+Control window transparency:
+
+```csharp
+this.BgAlpha = 0.8f; // 80% opaque
+```
+
+### Show/Hide Close Button
+
+```csharp
+this.ShowCloseButton = false; // Hide the X button
+```
+
+## Window State Management
+
+### Opening and Closing
+
+Control window visibility with the `IsOpen` property:
+
+```csharp
+public class MainWindow : Window
+{
+    public MainWindow() : base("Main Window")
+    {
+        // Window starts closed
+        this.IsOpen = false;
+    }
+    
+    public void OpenWindow()
+    {
+        this.IsOpen = true;
+    }
+    
+    public void CloseWindow()
+    {
+        this.IsOpen = false;
+    }
+    
+    public void Toggle()
+    {
+        this.Toggle(); // Built-in toggle method
+    }
+}
+```
+
+### Lifecycle Callbacks
+
+Implement callbacks for window lifecycle events:
+
+```csharp
+public override void OnOpen()
+{
+    // Called when the window is opened
+    // Load data, initialize state, etc.
+}
+
+public override void OnClose()
+{
+    // Called when the window is closed
+    // Save settings, clean up, etc.
+}
+
+public override void OnSafeToRemove()
+{
+    // Called when it's safe to dispose resources
+    // Used after fade-out animations complete
+}
+```
+
+### Pre/Post Draw
+
+Execute code before or after the window draws:
+
+```csharp
+public override void PreDraw()
+{
+    // Called before the window begins drawing
+    // Set up styles, push fonts, etc.
+    ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 10));
+}
+
+public override void PostDraw()
+{
+    // Called after the window finishes drawing
+    // Clean up styles, pop fonts, etc.
+    ImGui.PopStyleVar();
+}
+```
+
+### Update
+
+Run code every frame, even when the window is collapsed:
+
+```csharp
+public override void Update()
+{
+    // Called every frame
+    // Update animations, check conditions, etc.
+}
+```
+
+### Draw Conditions
+
+Control when the window should be drawn:
+
+```csharp
+public override bool DrawConditions()
+{
+    // Return false to skip drawing this frame
+    // Useful for hiding UI based on game state
+    return !IsInPvP();
+}
+```
+
+### Pre-Open Check
+
+Execute code before checking if the window should be drawn:
+
+```csharp
+public override void PreOpenCheck()
+{
+    // Called before IsOpen is checked
+    // Update state that affects visibility
+}
+```
+
+## Window Interactions
+
+### Focus Management
+
+Check and control window focus:
+
+```csharp
+public override void Draw()
+{
+    if (this.IsFocused)
+    {
+        ImGui.TextColored(new Vector4(0, 1, 0, 1), "Window has focus!");
+    }
+    
+    if (ImGui.Button("Bring to Front"))
+    {
+        this.BringToFront();
+    }
+}
+```
+
+### Escape Key Behavior
+
+Control whether Escape closes the window:
+
+```csharp
+public ConfigWindow() : base("Configuration")
+{
+    // Pressing Escape will close this window
+    this.RespectCloseHotkey = true;
+}
+```
+
+## Window Features
+
+### Sound Effects
+
+Customize window open/close sounds:
+
+```csharp
+public MainWindow() : base("Main Window")
+{
+    // Disable all sounds
+    this.DisableWindowSounds = true;
+    
+    // Or customize sound effect IDs
+    this.OnOpenSfxId = 23u;  // Default open sound
+    this.OnCloseSfxId = 24u; // Default close sound
+}
+```
+
+### Fade Effects
+
+Disable fade-in/fade-out animations:
+
+```csharp
+this.DisableFadeInFadeOut = true;
+```
+
+### Pinning and Clickthrough
+
+Allow users to pin windows or make them clickthrough:
+
+```csharp
+public OverlayWindow() : base("Overlay")
+{
+    // Allow pinning (prevents move/resize)
+    this.AllowPinning = true;
+    
+    // Allow clickthrough mode
+    this.AllowClickthrough = true;
+}
+
+public override void Draw()
+{
+    if (this.IsPinned)
+    {
+        ImGui.Text("Window is pinned!");
+    }
+    
+    if (this.IsClickthrough)
+    {
+        ImGui.Text("Window is clickthrough!");
+    }
+}
+```
+
+<Note>
+  When a window is clickthrough, most input is ignored. Use `AvailableClickthrough` on title bar buttons to make them work in clickthrough mode.
+</Note>
+
+### Title Bar Buttons
+
+Add custom buttons to the window title bar:
+
+```csharp
+public MainWindow() : base("Main Window")
+{
+    this.TitleBarButtons = new List<TitleBarButton>
+    {
+        new TitleBarButton
+        {
+            Icon = FontAwesomeIcon.Cog,
+            IconOffset = new Vector2(2, 1),
+            ShowTooltip = () => ImGui.SetTooltip("Settings"),
+            Click = (button) =>
+            {
+                // Handle click
+                OpenSettings();
+            },
+            Priority = 0
+        },
+        new TitleBarButton
+        {
+            Icon = FontAwesomeIcon.QuestionCircle,
+            IconOffset = new Vector2(2, 1),
+            ShowTooltip = () => ImGui.SetTooltip("Help"),
+            Click = (button) => OpenHelp(),
+            Priority = -1,
+            AvailableClickthrough = true // Works even when window is clickthrough
+        }
+    };
+}
+```
+
+## Managing Multiple Windows
+
+### Adding and Removing Windows
+
+```csharp
+// Add a window
+var mainWindow = new MainWindow();
+this.WindowSystem.AddWindow(mainWindow);
+
+// Remove a specific window
+this.WindowSystem.RemoveWindow(mainWindow);
+
+// Remove all windows
+this.WindowSystem.RemoveAllWindows();
+```
+
+### Accessing Windows
+
+```csharp
+// Get all windows
+IReadOnlyList<Window> windows = this.WindowSystem.Windows;
+
+// Find a specific window
+var configWindow = this.WindowSystem.Windows
+    .OfType<ConfigWindow>()
+    .FirstOrDefault();
+```
+
+### Window Focus State
+
+```csharp
+// Check if any window has focus
+if (this.WindowSystem.HasAnyFocus)
+{
+    // At least one window is focused
+}
+
+// Get the focused window's namespace
+string focusedNamespace = WindowSystem.FocusedWindowSystemNamespace;
+```
+
+## Advanced Features
+
+### Window Namespace
+
+Assign namespaces for organizing windows:
+
+```csharp
+public MainWindow() : base("Main Window")
+{
+    this.Namespace = "MyPlugin.Main";
+}
+```
+
+### Collapsed State
+
+Control initial collapsed state:
+
+```csharp
+this.Collapsed = true;
+this.CollapsedCondition = ImGuiCond.FirstUseEver;
+```
+
+## Complete Example
+
+```csharp
+using System.Numerics;
+using Dalamud.Interface.Windowing;
+using ImGuiNET;
+
+public class ExampleWindow : Window, IDisposable
+{
+    private string inputText = string.Empty;
+    private float sliderValue = 0.5f;
+    
+    public ExampleWindow() : base(
+        "Example Window###ExamplePluginWindow",
+        ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+    {
+        // Set size constraints
+        this.SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(375, 330),
+            MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+        };
+        
+        // Add a title bar button
+        this.TitleBarButtons = new List<TitleBarButton>
+        {
+            new TitleBarButton
+            {
+                Icon = FontAwesomeIcon.Cog,
+                IconOffset = new Vector2(2, 1),
+                Click = _ => OpenSettings(),
+                ShowTooltip = () => ImGui.SetTooltip("Open Settings")
+            }
+        };
+    }
+    
+    public override void OnOpen()
+    {
+        // Initialize when window opens
+        this.inputText = "Hello, world!";
+    }
+    
+    public override void Draw()
+    {
+        ImGui.Text("This is an example window.");
+        
+        if (this.IsFocused)
+        {
+            ImGui.TextColored(new Vector4(0, 1, 0, 1), "Window is focused");
+        }
+        
+        ImGui.InputText("Text Input", ref this.inputText, 100);
+        ImGui.SliderFloat("Slider", ref this.sliderValue, 0f, 1f);
+        
+        if (ImGui.Button("Close Window"))
+        {
+            this.IsOpen = false;
+        }
+    }
+    
+    public override void OnClose()
+    {
+        // Save settings when window closes
+    }
+    
+    private void OpenSettings()
+    {
+        // Handle settings button
+    }
+    
+    public void Dispose()
+    {
+        // Clean up resources
+    }
+}
+```
+
+## Best Practices
+
+<Steps>
+
+### Use One WindowSystem per Plugin
+
+Create a single `WindowSystem` instance and add all your windows to it.
+
+### Set Appropriate Size Constraints
+
+Always set minimum and maximum sizes to prevent windows from becoming unusable.
+
+### Use Meaningful Window IDs
+
+Append unique IDs with `###` to avoid conflicts with other plugins.
+
+### Implement Lifecycle Methods
+
+Use `OnOpen`, `OnClose`, and `Update` to properly manage window state.
+
+### Respect User Preferences
+
+Honor settings like `RespectCloseHotkey`, `AllowPinning`, and `AllowClickthrough`.
+
+</Steps>
+
+## See Also
+
+- [UiBuilder](/ui/ui-builder) - Core UI interface and event system
+- [ImGui Basics](/ui/imgui-basics) - Introduction to ImGui controls
+- [Fonts](/ui/fonts) - Using custom fonts in windows
+- [Textures](/ui/textures) - Displaying images in windows

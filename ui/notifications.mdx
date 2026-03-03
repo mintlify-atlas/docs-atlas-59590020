@@ -1,0 +1,643 @@
+---
+title: Notifications
+description: Displaying toast-style notifications using the Notification Manager
+---
+
+The `INotificationManager` service provides a system for displaying toast-style notifications to users. These notifications appear in the corner of the screen and can include icons, progress bars, and custom actions.
+
+## Getting Started
+
+Access the notification manager through plugin services:
+
+```csharp
+[PluginService]
+private INotificationManager NotificationManager { get; set; } = null!;
+```
+
+## Basic Notifications
+
+### Simple Notification
+
+```csharp
+using Dalamud.Interface.ImGuiNotification;
+
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Hello, world!"
+});
+```
+
+### Notification with Title
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Title = "Important Message",
+    Content = "This is the notification content."
+});
+```
+
+### Notification Types
+
+Use predefined types for visual styling:
+
+```csharp
+// Success notification (green)
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Operation completed successfully!",
+    Type = NotificationType.Success
+});
+
+// Warning notification (yellow)
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Warning: Low disk space",
+    Type = NotificationType.Warning
+});
+
+// Error notification (red)
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Error: Failed to save file",
+    Type = NotificationType.Error
+});
+
+// Info notification (blue)
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "New update available",
+    Type = NotificationType.Info
+});
+
+// None (default)
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Generic notification",
+    Type = NotificationType.None
+});
+```
+
+## Notification Duration
+
+### Initial Duration
+
+Set how long the notification stays visible:
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "This will disappear after 5 seconds",
+    InitialDuration = TimeSpan.FromSeconds(5)
+});
+```
+
+### Hard Expiry
+
+Set an absolute expiration time:
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Expires at specific time",
+    HardExpiry = DateTime.Now.AddMinutes(2)
+});
+```
+
+### Persistent Notification
+
+Create a notification that doesn't auto-dismiss:
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Click to dismiss",
+    InitialDuration = TimeSpan.MaxValue,
+    HardExpiry = DateTime.MaxValue
+});
+```
+
+### Extension on Hover
+
+Extend duration when user hovers over the notification:
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Hover to keep visible",
+    InitialDuration = TimeSpan.FromSeconds(5),
+    ExtensionDurationSinceLastInterest = TimeSpan.FromSeconds(3) // Adds 3s on hover
+});
+```
+
+## Icons
+
+### FontAwesome Icons
+
+```csharp
+using Dalamud.Game.Text;
+
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Downloaded successfully",
+    Type = NotificationType.Success,
+    Icon = INotificationIcon.From(FontAwesomeIcon.Download)
+});
+```
+
+### Game Icons (SeIconChar)
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Gil received",
+    Icon = INotificationIcon.From(SeIconChar.Gil)
+});
+```
+
+### Game Icon from Path
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "New item obtained",
+    Icon = INotificationIcon.FromGame("ui/icon/060000/060001.tex")
+});
+```
+
+### Icon from File
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Custom notification",
+    Icon = INotificationIcon.FromFile(@"C:\path\to\icon.png")
+});
+```
+
+### Icon from Texture
+
+Use `ITextureProvider` to load a texture for the icon:
+
+```csharp
+[PluginService]
+private ITextureProvider TextureProvider { get; set; } = null!;
+
+var iconTexture = this.TextureProvider.GetFromGameIcon(new GameIconLookup(60001));
+
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Icon from texture provider",
+    IconTexture = iconTexture
+});
+```
+
+## Progress Notifications
+
+Display progress bars in notifications:
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Title = "Downloading",
+    Content = "Please wait...",
+    Type = NotificationType.Info,
+    Progress = 0.0f,
+    ShowIndeterminateIfNoExpiry = false
+});
+
+// Update progress
+for (int i = 0; i <= 100; i += 10)
+{
+    notification.Progress = i / 100f;
+    await Task.Delay(500);
+}
+
+notification.Content = "Download complete!";
+notification.Type = NotificationType.Success;
+notification.Progress = 1.0f;
+```
+
+### Indeterminate Progress
+
+Show an animated progress bar without specific progress:
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Processing...",
+    InitialDuration = TimeSpan.MaxValue,
+    ShowIndeterminateIfNoExpiry = true
+});
+```
+
+## Active Notifications
+
+When you add a notification, you get an `IActiveNotification` back:
+
+```csharp
+IActiveNotification notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Initial message"
+});
+
+// Modify the notification
+notification.Content = "Updated message";
+notification.Type = NotificationType.Success;
+```
+
+### Dismissing Notifications
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Will be dismissed programmatically"
+});
+
+// Dismiss immediately
+notification.DismissNow();
+```
+
+### Extending Duration
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Can be extended",
+    InitialDuration = TimeSpan.FromSeconds(5)
+});
+
+// Add 10 more seconds
+notification.ExtendBy(TimeSpan.FromSeconds(10));
+```
+
+### User Dismissal
+
+Control whether users can dismiss notifications:
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Cannot be closed by user",
+    UserDismissable = false
+});
+```
+
+## Notification Events
+
+### Click Event
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Click me!"
+});
+
+notification.Click += (args) =>
+{
+    // Handle click
+    PluginLog.Information("Notification clicked!");
+};
+```
+
+### Dismiss Event
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Watch me disappear"
+});
+
+notification.Dismiss += (args) =>
+{
+    var reason = args.Reason;
+    PluginLog.Information($"Dismissed: {reason}");
+};
+```
+
+Dismiss reasons:
+- `Manual` - User clicked dismiss
+- `Expired` - Auto-dismissed after timeout
+- `Programmatic` - Dismissed via `DismissNow()`
+- `PluginUnload` - Plugin unloaded
+
+### Draw Actions Event
+
+Add custom buttons to notifications:
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Action required",
+    InitialDuration = TimeSpan.MaxValue
+});
+
+notification.DrawActions += (args) =>
+{
+    if (ImGui.Button("Accept"))
+    {
+        HandleAccept();
+        notification.DismissNow();
+    }
+    
+    ImGui.SameLine();
+    
+    if (ImGui.Button("Decline"))
+    {
+        HandleDecline();
+        notification.DismissNow();
+    }
+};
+```
+
+## Minimized State
+
+Control whether notifications start minimized:
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Full content here",
+    MinimizedText = "Short text",
+    Minimized = true  // Starts minimized
+});
+```
+
+## Respecting UI State
+
+Control whether the notification respects UI hide settings:
+
+```csharp
+this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Always visible",
+    RespectUiHidden = false  // Shows even when UI is hidden
+});
+```
+
+## Notification Properties
+
+Access notification state:
+
+```csharp
+var notification = this.NotificationManager.AddNotification(new Notification
+{
+    Content = "Status check"
+});
+
+// Get notification ID
+long id = notification.Id;
+
+// Get creation time
+DateTime created = notification.CreatedAt;
+
+// Get effective expiry
+DateTime expiry = notification.EffectiveExpiry;
+
+// Check if dismissed
+NotificationDismissReason? reason = notification.DismissReason;
+if (reason.HasValue)
+{
+    // Notification has been dismissed
+}
+```
+
+## Advanced Usage
+
+### Update Notification Content
+
+```csharp
+private IActiveNotification? statusNotification;
+
+public void ShowProgress()
+{
+    this.statusNotification = this.NotificationManager.AddNotification(new Notification
+    {
+        Title = "Processing",
+        Content = "Starting...",
+        Progress = 0.0f,
+        InitialDuration = TimeSpan.MaxValue
+    });
+}
+
+public void UpdateProgress(float progress, string status)
+{
+    if (this.statusNotification != null)
+    {
+        this.statusNotification.Content = status;
+        this.statusNotification.Progress = progress;
+    }
+}
+
+public void CompleteProgress()
+{
+    if (this.statusNotification != null)
+    {
+        this.statusNotification.Content = "Complete!";
+        this.statusNotification.Type = NotificationType.Success;
+        this.statusNotification.InitialDuration = TimeSpan.FromSeconds(3);
+    }
+}
+```
+
+### Multi-Step Notifications
+
+```csharp
+public async Task PerformOperationAsync()
+{
+    var notification = this.NotificationManager.AddNotification(new Notification
+    {
+        Title = "Multi-Step Operation",
+        Content = "Step 1 of 3: Preparing...",
+        Progress = 0.0f,
+        Icon = INotificationIcon.From(FontAwesomeIcon.Cog),
+        InitialDuration = TimeSpan.MaxValue
+    });
+    
+    try
+    {
+        await DoStep1();
+        notification.Content = "Step 2 of 3: Processing...";
+        notification.Progress = 0.33f;
+        
+        await DoStep2();
+        notification.Content = "Step 3 of 3: Finalizing...";
+        notification.Progress = 0.66f;
+        
+        await DoStep3();
+        notification.Content = "Operation completed!";
+        notification.Progress = 1.0f;
+        notification.Type = NotificationType.Success;
+        notification.Icon = INotificationIcon.From(FontAwesomeIcon.Check);
+        notification.InitialDuration = TimeSpan.FromSeconds(5);
+    }
+    catch (Exception ex)
+    {
+        notification.Content = $"Error: {ex.Message}";
+        notification.Type = NotificationType.Error;
+        notification.Icon = INotificationIcon.From(FontAwesomeIcon.ExclamationTriangle);
+        notification.InitialDuration = TimeSpan.FromSeconds(10);
+    }
+}
+```
+
+## Best Practices
+
+<Steps>
+
+### Keep Content Concise
+
+Notifications should display brief, actionable information.
+
+### Use Appropriate Types
+
+Choose the correct `NotificationType` to match the message severity.
+
+### Set Reasonable Durations
+
+Don't make notifications too short (< 3 seconds) or too long (> 10 seconds) unless necessary.
+
+### Add Icons
+
+Icons help users quickly identify notification types.
+
+### Handle Dismissal
+
+Use the `Dismiss` event to clean up resources when notifications are dismissed.
+
+### Update, Don't Spam
+
+For ongoing operations, update a single notification rather than creating multiple ones.
+
+</Steps>
+
+## Complete Example
+
+```csharp
+using Dalamud.Game.Text;
+using Dalamud.Interface.ImGuiNotification;
+using Dalamud.Plugin.Services;
+
+public class NotificationExample
+{
+    private INotificationManager NotificationManager { get; init; }
+    private IActiveNotification? downloadNotification;
+    
+    public NotificationExample(INotificationManager notificationManager)
+    {
+        this.NotificationManager = notificationManager;
+    }
+    
+    public void ShowSimpleNotification()
+    {
+        this.NotificationManager.AddNotification(new Notification
+        {
+            Content = "Simple notification!",
+            Type = NotificationType.Info,
+            InitialDuration = TimeSpan.FromSeconds(5)
+        });
+    }
+    
+    public void ShowClickableNotification()
+    {
+        var notification = this.NotificationManager.AddNotification(new Notification
+        {
+            Title = "New Message",
+            Content = "Click to view",
+            Icon = INotificationIcon.From(FontAwesomeIcon.Envelope),
+            InitialDuration = TimeSpan.FromSeconds(10)
+        });
+        
+        notification.Click += (args) =>
+        {
+            OpenMessageWindow();
+            notification.DismissNow();
+        };
+    }
+    
+    public void StartDownload()
+    {
+        this.downloadNotification = this.NotificationManager.AddNotification(new Notification
+        {
+            Title = "Downloading",
+            Content = "Starting download...",
+            Icon = INotificationIcon.From(FontAwesomeIcon.Download),
+            Progress = 0.0f,
+            InitialDuration = TimeSpan.MaxValue,
+            UserDismissable = false
+        });
+    }
+    
+    public void UpdateDownload(float progress)
+    {
+        if (this.downloadNotification != null)
+        {
+            this.downloadNotification.Progress = progress;
+            this.downloadNotification.Content = $"Downloading... {progress:P0}";
+        }
+    }
+    
+    public void CompleteDownload(bool success)
+    {
+        if (this.downloadNotification != null)
+        {
+            if (success)
+            {
+                this.downloadNotification.Title = "Download Complete";
+                this.downloadNotification.Content = "File downloaded successfully";
+                this.downloadNotification.Type = NotificationType.Success;
+                this.downloadNotification.Icon = INotificationIcon.From(FontAwesomeIcon.Check);
+            }
+            else
+            {
+                this.downloadNotification.Title = "Download Failed";
+                this.downloadNotification.Content = "Failed to download file";
+                this.downloadNotification.Type = NotificationType.Error;
+                this.downloadNotification.Icon = INotificationIcon.From(FontAwesomeIcon.Times);
+            }
+            
+            this.downloadNotification.Progress = 1.0f;
+            this.downloadNotification.UserDismissable = true;
+            this.downloadNotification.InitialDuration = TimeSpan.FromSeconds(5);
+            this.downloadNotification = null;
+        }
+    }
+    
+    public void ShowActionNotification()
+    {
+        var notification = this.NotificationManager.AddNotification(new Notification
+        {
+            Title = "Confirm Action",
+            Content = "Do you want to proceed?",
+            Type = NotificationType.Warning,
+            Icon = INotificationIcon.From(FontAwesomeIcon.QuestionCircle),
+            InitialDuration = TimeSpan.MaxValue
+        });
+        
+        notification.DrawActions += (args) =>
+        {
+            if (ImGui.Button("Yes"))
+            {
+                ProceedWithAction();
+                notification.DismissNow();
+            }
+            
+            ImGui.SameLine();
+            
+            if (ImGui.Button("No"))
+            {
+                notification.DismissNow();
+            }
+        };
+    }
+    
+    private void OpenMessageWindow() { }
+    private void ProceedWithAction() { }
+}
+```
+
+## See Also
+
+- [UiBuilder](/ui/ui-builder) - Core UI interface
+- [ImGui Basics](/ui/imgui-basics) - Basic ImGui usage
+- [Textures](/ui/textures) - Using textures for notification icons

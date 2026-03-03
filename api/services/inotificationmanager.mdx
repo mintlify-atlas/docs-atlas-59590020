@@ -1,0 +1,228 @@
+---
+title: INotificationManager
+description: Display ImGui-based notifications
+---
+
+## Overview
+
+`INotificationManager` manages notifications provided by Dalamud using ImGui. These are different from native game toasts and provide more customization options.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Methods
+
+### AddNotification
+
+```csharp
+public IActiveNotification AddNotification(Notification notification);
+```
+
+Adds a notification to be displayed.
+
+<ParamField path="notification" type="Notification" required>
+  The notification to add
+</ParamField>
+
+<ResponseField name="return" type="IActiveNotification">
+  The added active notification that can be used to update or dismiss the notification
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly INotificationManager notificationManager;
+    
+    public MyPlugin(INotificationManager notificationManager)
+    {
+        this.notificationManager = notificationManager;
+    }
+    
+    public void ShowSimpleNotification()
+    {
+        this.notificationManager.AddNotification(new Notification
+        {
+            Content = "This is a simple notification",
+            Type = NotificationType.Info
+        });
+    }
+    
+    public void ShowNotificationWithTitle()
+    {
+        this.notificationManager.AddNotification(new Notification
+        {
+            Title = "Plugin Name",
+            Content = "Operation completed successfully!",
+            Type = NotificationType.Success
+        });
+    }
+    
+    public void ShowNotificationWithIcon()
+    {
+        this.notificationManager.AddNotification(new Notification
+        {
+            Content = "Achievement unlocked!",
+            Type = NotificationType.Success,
+            Icon = INotificationIcon.From(FontAwesomeIcon.Trophy)
+        });
+    }
+    
+    public void ShowWarning()
+    {
+        this.notificationManager.AddNotification(new Notification
+        {
+            Title = "Warning",
+            Content = "This action cannot be undone",
+            Type = NotificationType.Warning,
+            Minimized = false
+        });
+    }
+    
+    public void ShowError()
+    {
+        this.notificationManager.AddNotification(new Notification
+        {
+            Title = "Error",
+            Content = "Failed to load configuration",
+            Type = NotificationType.Error
+        });
+    }
+}
+```
+
+## Advanced Usage
+
+### Progress Notification
+
+```csharp
+public async Task ShowProgressNotification()
+{
+    var notification = this.notificationManager.AddNotification(new Notification
+    {
+        Title = "Processing",
+        Content = "Please wait...",
+        Type = NotificationType.Info,
+        InitialDuration = TimeSpan.Zero, // Don't auto-dismiss
+        Progress = 0.0f
+    });
+    
+    for (int i = 0; i <= 100; i += 10)
+    {
+        notification.Progress = i / 100.0f;
+        notification.Content = $"Processing: {i}%";
+        await Task.Delay(500);
+    }
+    
+    notification.Type = NotificationType.Success;
+    notification.Content = "Processing complete!";
+    notification.InitialDuration = TimeSpan.FromSeconds(3);
+}
+```
+
+### Custom Duration
+
+```csharp
+public void ShowLongNotification()
+{
+    this.notificationManager.AddNotification(new Notification
+    {
+        Content = "This notification will stay for 10 seconds",
+        Type = NotificationType.Info,
+        InitialDuration = TimeSpan.FromSeconds(10)
+    });
+}
+```
+
+### Dismissible Notification
+
+```csharp
+private IActiveNotification? activeNotification;
+
+public void ShowDismissibleNotification()
+{
+    this.activeNotification = this.notificationManager.AddNotification(new Notification
+    {
+        Title = "Important",
+        Content = "Click to perform action",
+        Type = NotificationType.Info,
+        InitialDuration = TimeSpan.Zero, // Stays until dismissed
+        Minimized = false
+    });
+}
+
+public void DismissNotification()
+{
+    this.activeNotification?.DismissNow();
+    this.activeNotification = null;
+}
+```
+
+### With Click Action
+
+```csharp
+public void ShowClickableNotification()
+{
+    var notification = this.notificationManager.AddNotification(new Notification
+    {
+        Content = "Click to open settings",
+        Type = NotificationType.Info
+    });
+    
+    // Note: Click handling depends on IActiveNotification implementation
+    // Check the specific API for click event handling
+}
+```
+
+## Notification Types
+
+### NotificationType.None
+No specific type, uses default styling.
+
+### NotificationType.Info
+Informational notification with blue accent.
+
+### NotificationType.Success
+Success notification with green accent.
+
+### NotificationType.Warning
+Warning notification with yellow/orange accent.
+
+### NotificationType.Error
+Error notification with red accent.
+
+## Notification Properties
+
+### Title
+Optional title displayed at the top of the notification.
+
+### Content
+The main message content of the notification.
+
+### Type
+The notification type that determines visual styling.
+
+### Icon
+Optional icon displayed with the notification.
+
+### InitialDuration
+How long the notification should be displayed. Set to `TimeSpan.Zero` to require manual dismissal.
+
+### Minimized
+Whether the notification starts in a minimized state.
+
+### Progress
+Optional progress bar (0.0 to 1.0). Useful for long-running operations.
+
+## Remarks
+
+- ImGui notifications are rendered by Dalamud's UI layer, not the game
+- Notifications can be updated after creation using the returned `IActiveNotification`
+- Use `InitialDuration = TimeSpan.Zero` for notifications that should not auto-dismiss
+- Notifications stack vertically in the corner of the screen
+- These notifications are separate from native game toasts (`IToastGui`)
+- Progress bars are useful for showing operation progress

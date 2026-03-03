@@ -1,0 +1,415 @@
+---
+title: CallGate Provider
+description: Expose functionality to other plugins using IPC providers
+---
+
+CallGate providers allow your plugin to expose functions and send notifications to other plugins. This enables your plugin to become a platform that others can build upon.
+
+## Creating a Provider
+
+Use `GetIpcProvider` with type parameters matching your function signature:
+
+```csharp
+var provider = this.pluginInterface.GetIpcProvider<TRet>("gate.name");
+var provider = this.pluginInterface.GetIpcProvider<T1, TRet>("gate.name");
+var provider = this.pluginInterface.GetIpcProvider<T1, T2, TRet>("gate.name");
+// ... up to 8 parameters
+```
+
+### Type Parameters
+
+- `T1` through `T8`: Parameter types (in order)
+- `TRet`: Return type (use `object` if no return value needed)
+
+## Interface Reference
+
+Providers implement `ICallGateProvider<...>` with these members:
+
+### Properties
+
+```csharp
+public interface ICallGateProvider
+{
+    /// <summary>
+    /// Number of subscribers listening for messages through this gate.
+    /// </summary>
+    int SubscriptionCount { get; }
+}
+```
+
+### Methods
+
+```csharp
+// Register an action (no return value)
+void RegisterAction(Action<T1, T2, ...> action);
+
+// Register a function (with return value)
+void RegisterFunc(Func<T1, T2, ..., TRet> func);
+
+// Send notification to all subscribers
+void SendMessage(T1 arg1, T2 arg2, ...);
+
+// Unregister the action or function
+void UnregisterAction();
+void UnregisterFunc();
+
+// Get information about the calling plugin
+IpcContext? GetContext();
+```
+
+## Registering Functions
+
+### Function with Return Value
+
+Register a function that returns a value:
+
+```csharp
+private ICallGateProvider<string, int>? provider;
+
+public void Initialize()
+{
+    this.provider = this.pluginInterface.GetIpcProvider<string, int>("MyPlugin.GetLength");
+    
+    this.provider.RegisterFunc(input =>
+    {
+        // Your implementation
+        return input?.Length ?? 0;
+    });
+}
+```
+
+### Action without Return Value
+
+Register an action that performs work without returning:
+
+```csharp
+private ICallGateProvider<string, object>? provider;
+
+public void Initialize()
+{
+    this.provider = this.pluginInterface.GetIpcProvider<string, object>("MyPlugin.DoWork");
+    
+    this.provider.RegisterAction(input =>
+    {
+        // Perform work
+        PluginLog.Information($"Received: {input}");
+    });
+}
+```
+
+<Note>
+  When using actions, set `TRet` to `object` since there's no return value.
+</Note>
+
+## Sending Notifications
+
+Broadcast events to all subscribers:
+
+```csharp
+private ICallGateProvider<string, object>? statusProvider;
+
+public void Initialize()
+{
+    this.statusProvider = this.pluginInterface.GetIpcProvider<string, object>("MyPlugin.StatusChanged");
+}
+
+public void OnStatusChanged(string newStatus)
+{
+    // Notify all subscribers
+    this.statusProvider?.SendMessage(newStatus);
+}
+```
+
+### Checking Subscriber Count
+
+Optimize by checking if anyone is listening:
+
+```csharp
+if (this.statusProvider.SubscriptionCount > 0)
+{
+    // Only compute expensive data if someone is listening
+    var data = ComputeExpensiveData();
+    this.statusProvider.SendMessage(data);
+}
+```
+
+## Getting Caller Context
+
+Access information about the calling plugin:
+
+```csharp
+this.provider.RegisterFunc(input =>
+{
+    var context = this.provider.GetContext();
+    
+    if (context?.SourcePlugin != null)
+    {
+        PluginLog.Information($"Called by: {context.SourcePlugin.Name}");
+        PluginLog.Information($"Plugin internal name: {context.SourcePlugin.InternalName}");
+    }
+    
+    return ProcessInput(input);
+});
+```
+
+### IpcContext Properties
+
+```csharp
+public class IpcContext
+{
+    /// <summary>
+    /// The plugin that initiated this IPC call.
+    /// </summary>
+    public IExposedPlugin? SourcePlugin { get; }
+}
+
+public interface IExposedPlugin
+{
+    string Name { get; }              // Display name
+    string InternalName { get; }      // Unique identifier
+    Version Version { get; }          // Plugin version
+    // ... other properties
+}
+```
+
+## Practical Example: Character Service
+
+A complete example exposing character information:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Ipc;
+using Dalamud.Game.ClientState.Objects;
+using Dalamud.Plugin.Services;
+
+public class CharacterServiceIpc : IDisposable
+{
+    private readonly IClientState clientState;
+    private readonly IObjectTable objectTable;
+    
+    private ICallGateProvider<string?>? nameProvider;
+    private ICallGateProvider<uint>? levelProvider;
+    private ICallGateProvider<string, object>? loginProvider;
+    
+    public CharacterServiceIpc(
+        IDalamudPluginInterface pluginInterface,
+        IClientState clientState,
+        IObjectTable objectTable)
+    {
+        this.clientState = clientState;
+        this.objectTable = objectTable;
+        
+        // Function: Get player name
+        this.nameProvider = pluginInterface.GetIpcProvider<string?>(
+            "CharacterService.GetName");
+        this.nameProvider.RegisterFunc(this.GetPlayerName);
+        
+        // Function: Get player level
+        this.levelProvider = pluginInterface.GetIpcProvider<uint>(
+            "CharacterService.GetLevel");
+        this.levelProvider.RegisterFunc(this.GetPlayerLevel);
+        
+        // Notification: Login event
+        this.loginProvider = pluginInterface.GetIpcProvider<string, object>(
+            "CharacterService.Login");
+        
+        this.clientState.Login += this.OnLogin;
+    }
+    
+    private string? GetPlayerName()
+    {
+        return this.clientState.LocalPlayer?.Name.TextValue;
+    }
+    
+    private uint GetPlayerLevel()
+    {
+        return this.clientState.LocalPlayer?.Level ?? 0;
+    }
+    
+    private void OnLogin()
+    {
+        var name = this.GetPlayerName();
+        if (name != null)
+        {
+            // Notify subscribers that player logged in
+            this.loginProvider?.SendMessage(name);
+        }
+    }
+    
+    public void Dispose()
+    {
+        this.clientState.Login -= this.OnLogin;
+        
+        this.nameProvider?.UnregisterFunc();
+        this.levelProvider?.UnregisterFunc();
+        // Note: No need to unregister actions for notification-only providers
+    }
+}
+```
+
+## Complex Type Example
+
+Expose complex data structures:
+
+```csharp
+public class CharacterInfo
+{
+    public string Name { get; set; }
+    public uint Level { get; set; }
+    public uint ClassJob { get; set; }
+    public string WorldName { get; set; }
+}
+
+public class ComplexIpcProvider
+{
+    private ICallGateProvider<CharacterInfo>? infoProvider;
+    
+    public void Initialize(IDalamudPluginInterface pluginInterface)
+    {
+        this.infoProvider = pluginInterface.GetIpcProvider<CharacterInfo>(
+            "MyPlugin.GetCharacterInfo");
+        
+        this.infoProvider.RegisterFunc(() =>
+        {
+            // Return complex object - automatically serialized
+            return new CharacterInfo
+            {
+                Name = "Warrior of Light",
+                Level = 90,
+                ClassJob = 21, // Warrior
+                WorldName = "Phoenix"
+            };
+        });
+    }
+}
+```
+
+<Note>
+  Complex types are automatically serialized to JSON when crossing plugin boundaries.
+</Note>
+
+## Error Handling
+
+### Exceptions in Providers
+
+Exceptions thrown by providers are propagated to subscribers:
+
+```csharp
+this.provider.RegisterFunc(input =>
+{
+    if (string.IsNullOrEmpty(input))
+    {
+        throw new ArgumentException("Input cannot be empty");
+    }
+    
+    return ProcessInput(input);
+});
+```
+
+The subscriber will receive this exception when calling `InvokeFunc`.
+
+### Notification Exceptions
+
+<Warning>
+  If a subscriber throws an exception during notification processing, remaining subscribers still execute. Exceptions are logged but not propagated.
+</Warning>
+
+## Best Practices
+
+### Keep Functions Fast
+
+<Warning>
+  IPC calls execute synchronously on the caller's thread. Keep your implementations fast to avoid blocking subscribers.
+</Warning>
+
+```csharp
+// Good: Fast lookup
+this.provider.RegisterFunc(id => this.cache.GetById(id));
+
+// Bad: Slow operation blocks caller
+this.provider.RegisterFunc(id => 
+    this.database.Query("SELECT * FROM ...").ToList());
+```
+
+### Document Your API
+
+Provide clear documentation for consumers:
+
+```csharp
+/// <summary>
+/// IPC API: "MyPlugin.GetCharacterName"
+/// Gets the current player's character name.
+/// </summary>
+/// <returns>Character name, or null if not logged in.</returns>
+public string? GetCharacterName() { ... }
+```
+
+### Version Your APIs
+
+For breaking changes, create new IPC gates:
+
+```csharp
+// Old API (deprecated but still supported)
+var oldProvider = pluginInterface.GetIpcProvider<string>(
+    "MyPlugin.GetData");
+
+// New API with different signature
+var newProvider = pluginInterface.GetIpcProvider<string, int>(
+    "MyPlugin.GetData.v2");
+```
+
+### Provide Availability Gates
+
+Let subscribers check if your plugin is ready:
+
+```csharp
+// Simple "ready" check
+var readyProvider = pluginInterface.GetIpcProvider<bool>("MyPlugin.Ready");
+readyProvider.RegisterFunc(() => this.IsInitialized);
+```
+
+### Use Notification for Events Only
+
+Use `SendMessage` for events, not request/response:
+
+```csharp
+// Good: Event notification
+this.eventProvider.SendMessage("ConfigChanged");
+
+// Bad: Using notifications for queries
+this.queryProvider.SendMessage("GetConfig"); // Use RegisterFunc instead!
+```
+
+## Cleanup
+
+Always unregister providers in your `Dispose` method:
+
+```csharp
+public void Dispose()
+{
+    // Unregister functions
+    this.provider?.UnregisterFunc();
+    
+    // Unregister actions
+    this.actionProvider?.UnregisterAction();
+    
+    // Clear references
+    this.provider = null;
+    this.actionProvider = null;
+}
+```
+
+<Note>
+  You don't need to unregister notification-only providers (those that only use `SendMessage`), but it's good practice to clean up all references.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CallGate Subscriber" icon="tower-cell" href="/ipc/callgate-subscriber">
+    Learn how to consume IPC functions from other plugins
+  </Card>
+  <Card title="Data Sharing" icon="database" href="/ipc/data-sharing">
+    Share large data structures efficiently
+  </Card>
+</CardGroup>

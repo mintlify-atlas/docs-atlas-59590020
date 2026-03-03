@@ -1,0 +1,797 @@
+---
+title: "Plugin Interface"
+description: "Complete reference for IDalamudPluginInterface"
+---
+
+## Overview
+
+`IDalamudPluginInterface` is your plugin's main gateway to Dalamud functionality. It's automatically injected into your plugin's constructor and provides access to:
+
+- UI building and drawing
+- Configuration management
+- Plugin metadata and state
+- Inter-plugin communication (IPC)
+- Service creation and injection
+- Dalamud system information
+
+See the full interface definition in Dalamud/Plugin/IDalamudPluginInterface.cs:25-335.
+
+## Basic Usage
+
+Receive the interface via constructor injection:
+
+```csharp
+public class Plugin : IDalamudPlugin
+{
+    private readonly IDalamudPluginInterface pluginInterface;
+
+    public Plugin(IDalamudPluginInterface pluginInterface)
+    {
+        this.pluginInterface = pluginInterface;
+        
+        // Access interface members
+        var reason = pluginInterface.Reason;
+        var configDir = pluginInterface.ConfigDirectory;
+    }
+}
+```
+
+## Properties
+
+### Plugin Information
+
+<ParamField path="InternalName" type="string">
+  The current internal plugin name.
+  
+  ```csharp
+  var name = pluginInterface.InternalName;
+  // "MyPlugin"
+  ```
+  
+  See IDalamudPluginInterface.cs:70
+</ParamField>
+
+<ParamField path="Manifest" type="IPluginManifest">
+  The plugin's manifest containing all metadata.
+  
+  ```csharp
+  var manifest = pluginInterface.Manifest;
+  var author = manifest.Author;
+  var version = manifest.AssemblyVersion;
+  var description = manifest.Description;
+  ```
+  
+  See IDalamudPluginInterface.cs:76
+</ParamField>
+
+<ParamField path="Reason" type="PluginLoadReason">
+  The reason this plugin was loaded.
+  
+  ```csharp
+  var reason = pluginInterface.Reason;
+  
+  if (reason.HasFlag(PluginLoadReason.Boot))
+  {
+      // First load on game start
+  }
+  else if (reason.HasFlag(PluginLoadReason.Update))
+  {
+      // Plugin was just updated
+  }
+  ```
+  
+  Possible values (see PluginLoadReason.cs:8-33):
+  - `Unknown`: Unknown reason
+  - `Installer`: Installed via plugin installer
+  - `Update`: Just updated
+  - `Reload`: Developer reload
+  - `Boot`: Game started or Dalamud reinjected
+  
+  See IDalamudPluginInterface.cs:52
+</ParamField>
+
+<ParamField path="IsDev" type="bool">
+  Whether this is a dev plugin.
+  
+  ```csharp
+  if (pluginInterface.IsDev)
+  {
+      // Enable debug features
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:81
+</ParamField>
+
+<ParamField path="IsTesting" type="bool">
+  Whether this is a testing release of a plugin.
+  
+  ```csharp
+  if (pluginInterface.IsTesting)
+  {
+      // Running beta version
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:89
+</ParamField>
+
+<ParamField path="SourceRepository" type="string">
+  The repository from which this plugin was installed.
+  
+  Official plugins return `SpecialPluginSource.MainRepo`.
+  Dev plugins return `SpecialPluginSource.DevPlugin`.
+  
+  ```csharp
+  var repo = pluginInterface.SourceRepository;
+  ```
+  
+  See IDalamudPluginInterface.cs:66
+</ParamField>
+
+### Timing Information
+
+<ParamField path="LoadTime" type="DateTime">
+  The local time when this plugin was loaded.
+  
+  ```csharp
+  var loadTime = pluginInterface.LoadTime;
+  ```
+  
+  See IDalamudPluginInterface.cs:94
+</ParamField>
+
+<ParamField path="LoadTimeUTC" type="DateTime">
+  The UTC time when this plugin was loaded.
+  
+  ```csharp
+  var loadTimeUtc = pluginInterface.LoadTimeUTC;
+  ```
+  
+  See IDalamudPluginInterface.cs:99
+</ParamField>
+
+<ParamField path="LoadTimeDelta" type="TimeSpan">
+  The time elapsed since this plugin was loaded.
+  
+  ```csharp
+  var elapsed = pluginInterface.LoadTimeDelta;
+  Console.WriteLine($"Plugin has been running for {elapsed.TotalMinutes:F2} minutes");
+  ```
+  
+  See IDalamudPluginInterface.cs:104
+</ParamField>
+
+### Directories and Files
+
+<ParamField path="DalamudAssetDirectory" type="DirectoryInfo">
+  The directory where Dalamud assets are stored.
+  
+  ```csharp
+  var assetDir = pluginInterface.DalamudAssetDirectory;
+  var iconPath = Path.Combine(assetDir.FullName, "UIRes", "icon.png");
+  ```
+  
+  See IDalamudPluginInterface.cs:109
+</ParamField>
+
+<ParamField path="AssemblyLocation" type="FileInfo">
+  The location of your plugin assembly.
+  
+  ```csharp
+  var dllPath = pluginInterface.AssemblyLocation;
+  var pluginDir = dllPath.Directory;
+  ```
+  
+  See IDalamudPluginInterface.cs:114
+</ParamField>
+
+<ParamField path="ConfigDirectory" type="DirectoryInfo">
+  The directory where your plugin configurations are stored.
+  
+  ```csharp
+  var configDir = pluginInterface.ConfigDirectory;
+  var customFile = Path.Combine(configDir.FullName, "custom.json");
+  ```
+  
+  See IDalamudPluginInterface.cs:119
+</ParamField>
+
+<ParamField path="ConfigFile" type="FileInfo">
+  The default config file for your plugin.
+  
+  ```csharp
+  var configFile = pluginInterface.ConfigFile;
+  // Typically: %AppData%/XIVLauncher/pluginConfig/MyPlugin/MyPlugin.json
+  ```
+  
+  See IDalamudPluginInterface.cs:124
+</ParamField>
+
+### UI and System State
+
+<ParamField path="UiBuilder" type="IUiBuilder">
+  The UI builder instance for drawing ImGui interfaces.
+  
+  ```csharp
+  var uiBuilder = pluginInterface.UiBuilder;
+  
+  // Register draw handler
+  uiBuilder.Draw += DrawUI;
+  
+  // Register config UI handler
+  uiBuilder.OpenConfigUi += () => configWindow.IsOpen = true;
+  
+  // Access fonts
+  var defaultFont = uiBuilder.DefaultFontHandle;
+  var iconFont = uiBuilder.IconFontHandle;
+  ```
+  
+  See IDalamudPluginInterface.cs:129 and UiBuilder.cs:28-335
+</ParamField>
+
+<ParamField path="IsDevMenuOpen" type="bool">
+  Whether Dalamud is running in Debug mode or the `/xldev` menu is open.
+  
+  ```csharp
+  if (pluginInterface.IsDevMenuOpen)
+  {
+      // Show debug information
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:134
+</ParamField>
+
+<ParamField path="IsDebugging" type="bool">
+  Whether a debugger is attached.
+  
+  ```csharp
+  if (pluginInterface.IsDebugging)
+  {
+      // Enable additional logging
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:139
+</ParamField>
+
+<ParamField path="UiLanguage" type="string">
+  The current UI language in two-letter ISO format.
+  
+  ```csharp
+  var lang = pluginInterface.UiLanguage;
+  // "en", "ja", "de", "fr"
+  
+  var greeting = lang switch
+  {
+      "ja" => "こんにちは",
+      "de" => "Hallo",
+      "fr" => "Bonjour",
+      _ => "Hello"
+  };
+  ```
+  
+  See IDalamudPluginInterface.cs:144
+</ParamField>
+
+<ParamField path="IsAutoUpdateComplete" type="bool">
+  Whether auto-updates have completed this session.
+  
+  ```csharp
+  if (pluginInterface.IsAutoUpdateComplete)
+  {
+      // All plugins have finished updating
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:57
+</ParamField>
+
+### Utilities
+
+<ParamField path="Sanitizer" type="ISanitizer">
+  Serializer class with functions to remove special characters from strings.
+  
+  ```csharp
+  var sanitizer = pluginInterface.Sanitizer;
+  var clean = sanitizer.Sanitize("Text with <special> chars");
+  ```
+  
+  See IDalamudPluginInterface.cs:149
+</ParamField>
+
+<ParamField path="GeneralChatType" type="XivChatType">
+  The chat type used by default for plugin messages.
+  
+  ```csharp
+  var chatType = pluginInterface.GeneralChatType;
+  ```
+  
+  See IDalamudPluginInterface.cs:154
+</ParamField>
+
+<ParamField path="InstalledPlugins" type="IEnumerable<IExposedPlugin>">
+  A list of installed plugins along with their current state.
+  
+  ```csharp
+  foreach (var plugin in pluginInterface.InstalledPlugins)
+  {
+      Console.WriteLine($"{plugin.Name} - {plugin.IsLoaded}");
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:159
+</ParamField>
+
+## Events
+
+<ParamField path="LanguageChanged" type="event LanguageChangedDelegate">
+  Event fired when the UI language changes.
+  
+  ```csharp
+  pluginInterface.LanguageChanged += OnLanguageChanged;
+  
+  private void OnLanguageChanged(string langCode)
+  {
+      // Reload localization
+      LoadTranslations(langCode);
+  }
+  
+  // Don't forget to unsubscribe in Dispose!
+  pluginInterface.LanguageChanged -= OnLanguageChanged;
+  ```
+  
+  See IDalamudPluginInterface.cs:42
+</ParamField>
+
+<ParamField path="ActivePluginsChanged" type="event ActivePluginsChangedDelegate">
+  Event fired when the active list of plugins changes.
+  
+  ```csharp
+  pluginInterface.ActivePluginsChanged += OnActivePluginsChanged;
+  
+  private void OnActivePluginsChanged(IActivePluginsChangedEventArgs args)
+  {
+      // Handle plugin state changes
+  }
+  
+  // Unsubscribe in Dispose
+  pluginInterface.ActivePluginsChanged -= OnActivePluginsChanged;
+  ```
+  
+  See IDalamudPluginInterface.cs:47
+</ParamField>
+
+## Configuration Methods
+
+<ParamField path="SavePluginConfig" type="void (IPluginConfiguration?)">
+  Save a plugin configuration that inherits `IPluginConfiguration`.
+  
+  ```csharp
+  public class MyConfig : IPluginConfiguration
+  {
+      public int Version { get; set; } = 1;
+      public bool Enabled { get; set; } = true;
+  }
+  
+  var config = new MyConfig();
+  pluginInterface.SavePluginConfig(config);
+  ```
+  
+  See IDalamudPluginInterface.cs:284
+</ParamField>
+
+<ParamField path="GetPluginConfig" type="IPluginConfiguration?">
+  Get a previously saved plugin configuration or null if none exists.
+  
+  ```csharp
+  var config = pluginInterface.GetPluginConfig() as MyConfig ?? new MyConfig();
+  ```
+  
+  See IDalamudPluginInterface.cs:290
+</ParamField>
+
+<ParamField path="GetPluginConfigDirectory" type="string">
+  Get the config directory path.
+  
+  ```csharp
+  var dir = pluginInterface.GetPluginConfigDirectory();
+  // %AppData%/XIVLauncher/pluginConfig/MyPlugin
+  ```
+  
+  See IDalamudPluginInterface.cs:296
+</ParamField>
+
+<ParamField path="GetPluginLocDirectory" type="string">
+  Get the localization directory path.
+  
+  ```csharp
+  var locDir = pluginInterface.GetPluginLocDirectory();
+  // %AppData%/XIVLauncher/pluginConfig/MyPlugin/loc
+  
+  var langFile = Path.Combine(locDir, $"{langCode}.json");
+  ```
+  
+  See IDalamudPluginInterface.cs:302
+</ParamField>
+
+## UI Integration
+
+<ParamField path="OpenPluginInstallerTo" type="bool (PluginInstallerOpenKind, string?)">
+  Opens the plugin installer window.
+  
+  ```csharp
+  // Open to all plugins
+  pluginInterface.OpenPluginInstallerTo();
+  
+  // Open with search
+  pluginInterface.OpenPluginInstallerTo(
+      PluginInstallerOpenKind.AllPlugins,
+      "crafting");
+  
+  // Open to installed plugins
+  pluginInterface.OpenPluginInstallerTo(
+      PluginInstallerOpenKind.InstalledPlugins);
+  ```
+  
+  See IDalamudPluginInterface.cs:167
+</ParamField>
+
+<ParamField path="OpenDalamudSettingsTo" type="bool (SettingsOpenKind, string?)">
+  Opens the Dalamud settings window.
+  
+  ```csharp
+  // Open to general settings
+  pluginInterface.OpenDalamudSettingsTo();
+  
+  // Open with search
+  pluginInterface.OpenDalamudSettingsTo(
+      SettingsOpenKind.General,
+      "auto update");
+  ```
+  
+  See IDalamudPluginInterface.cs:175
+</ParamField>
+
+<ParamField path="OpenDeveloperMenu" type="bool">
+  Opens the dev menu bar.
+  
+  ```csharp
+  pluginInterface.OpenDeveloperMenu();
+  ```
+  
+  See IDalamudPluginInterface.cs:181
+</ParamField>
+
+## Plugin Queries
+
+<ParamField path="GetPlugin" type="IExposedPlugin? (Assembly|AssemblyLoadContext)">
+  Gets information about which plugin an assembly or load context belongs to.
+  
+  ```csharp
+  // Get plugin from assembly
+  var assembly = typeof(SomeType).Assembly;
+  var plugin = pluginInterface.GetPlugin(assembly);
+  
+  // Get plugin from context
+  var context = AssemblyLoadContext.GetLoadContext(assembly);
+  var plugin2 = pluginInterface.GetPlugin(context);
+  
+  if (plugin != null)
+  {
+      Console.WriteLine($"Belongs to: {plugin.Name}");
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:188, 195
+</ParamField>
+
+<ParamField path="GetDalamudVersion" type="IDalamudVersionInfo">
+  Gets information about the version of Dalamud this plugin is loaded into.
+  
+  ```csharp
+  var version = pluginInterface.GetDalamudVersion();
+  Console.WriteLine($"Dalamud version: {version.Version}");
+  ```
+  
+  See IDalamudPluginInterface.cs:201
+</ParamField>
+
+## Data Sharing
+
+Share data between plugins using tag-based storage:
+
+<ParamField path="GetOrCreateData<T>" type="T (string, Func<T>)">
+  Gets existing data or creates it if it doesn't exist.
+  
+  ```csharp
+  var sharedData = pluginInterface.GetOrCreateData(
+      "MySharedData",
+      () => new MyDataClass());
+  ```
+  
+  See IDalamudPluginInterface.cs:204
+</ParamField>
+
+<ParamField path="TryGetData<T>" type="bool (string, out T?)">
+  Tries to get existing data.
+  
+  ```csharp
+  if (pluginInterface.TryGetData<MyDataClass>("MySharedData", out var data))
+  {
+      // Data exists, use it
+  }
+  ```
+  
+  See IDalamudPluginInterface.cs:210
+</ParamField>
+
+<ParamField path="GetData<T>" type="T?">
+  Gets existing data or null.
+  
+  ```csharp
+  var data = pluginInterface.GetData<MyDataClass>("MySharedData");
+  ```
+  
+  See IDalamudPluginInterface.cs:213
+</ParamField>
+
+<ParamField path="RelinquishData" type="void (string)">
+  Releases shared data.
+  
+  ```csharp
+  pluginInterface.RelinquishData("MySharedData");
+  ```
+  
+  See IDalamudPluginInterface.cs:207
+</ParamField>
+
+## Inter-Plugin Communication (IPC)
+
+See the [IPC guide](/ipc/overview) for detailed information.
+
+### Provider Methods
+
+Create IPC providers to expose functionality:
+
+```csharp
+// Action with no return
+var provider = pluginInterface.GetIpcProvider<string, object>("MyPlugin.DoSomething");
+provider.RegisterAction((message) => 
+{
+    Console.WriteLine($"Received: {message}");
+});
+
+// Function with return value
+var funcProvider = pluginInterface.GetIpcProvider<int, int, int>("MyPlugin.Add");
+funcProvider.RegisterFunc((a, b) => a + b);
+```
+
+Supported overloads (see IDalamudPluginInterface.cs:222-247):
+- `GetIpcProvider<TRet>(name)`
+- `GetIpcProvider<T1, TRet>(name)`
+- `GetIpcProvider<T1, T2, TRet>(name)`
+- ... up to 8 type parameters
+
+### Subscriber Methods
+
+Subscribe to other plugins' IPC:
+
+```csharp
+// Subscribe to action
+var subscriber = pluginInterface.GetIpcSubscriber<string, object>("OtherPlugin.Event");
+subscriber.Subscribe((message) => 
+{
+    Console.WriteLine($"Event fired: {message}");
+});
+
+// Call function
+var funcSub = pluginInterface.GetIpcSubscriber<int, int, int>("OtherPlugin.Add");
+var result = funcSub.InvokeFunc(5, 3); // returns 8
+```
+
+Supported overloads (see IDalamudPluginInterface.cs:254-279):
+- `GetIpcSubscriber<TRet>(name)`
+- `GetIpcSubscriber<T1, TRet>(name)`
+- `GetIpcSubscriber<T1, T2, TRet>(name)`
+- ... up to 8 type parameters
+
+## Dependency Injection
+
+Create and inject instances with dependencies:
+
+<ParamField path="Create<T>" type="T? (params object[])">
+  Create a new object with dependency injection.
+  
+  ```csharp
+  public class MyService
+  {
+      public MyService(IChatGui chatGui, ICommandManager commands)
+      {
+          // Dependencies are injected
+      }
+  }
+  
+  var service = pluginInterface.Create<MyService>();
+  
+  // With scoped objects
+  var service2 = pluginInterface.Create<MyService>(customDependency);
+  ```
+  
+  See IDalamudPluginInterface.cs:310
+</ParamField>
+
+<ParamField path="CreateAsync<T>" type="Task<T> (params object[])">
+  Asynchronously create a new object with dependency injection.
+  
+  ```csharp
+  var service = await pluginInterface.CreateAsync<MyService>();
+  ```
+  
+  See IDalamudPluginInterface.cs:318
+</ParamField>
+
+<ParamField path="Inject" type="bool (object, params object[])">
+  Inject services into an existing object's properties.
+  
+  ```csharp
+  public class MyClass
+  {
+      [PluginService] public IChatGui ChatGui { get; set; } = null!;
+  }
+  
+  var obj = new MyClass();
+  pluginInterface.Inject(obj);
+  // obj.ChatGui is now injected
+  ```
+  
+  See IDalamudPluginInterface.cs:326
+</ParamField>
+
+<ParamField path="InjectAsync" type="Task (object, params object[])">
+  Asynchronously inject services into an existing object.
+  
+  ```csharp
+  var obj = new MyClass();
+  await pluginInterface.InjectAsync(obj);
+  ```
+  
+  See IDalamudPluginInterface.cs:334
+</ParamField>
+
+## Complete Example
+
+Here's a comprehensive example using many interface features:
+
+```csharp Plugin.cs
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using Dalamud.Game.Command;
+
+namespace MyPlugin;
+
+public class Plugin : IDalamudPlugin
+{
+    private readonly IDalamudPluginInterface pluginInterface;
+    private readonly ICommandManager commandManager;
+    private readonly IChatGui chatGui;
+    private readonly Configuration config;
+    private readonly PluginUI ui;
+
+    public Plugin(
+        IDalamudPluginInterface pluginInterface,
+        ICommandManager commandManager,
+        IChatGui chatGui)
+    {
+        this.pluginInterface = pluginInterface;
+        this.commandManager = commandManager;
+        this.chatGui = chatGui;
+
+        // Load configuration
+        this.config = pluginInterface.GetPluginConfig() as Configuration 
+                      ?? new Configuration();
+
+        // Log load information
+        var reason = pluginInterface.Reason;
+        chatGui.Print($"Loaded via: {reason}");
+        
+        if (pluginInterface.IsDev)
+        {
+            chatGui.Print("Running as dev plugin");
+        }
+
+        // Create UI
+        this.ui = new PluginUI(this);
+        pluginInterface.UiBuilder.Draw += ui.Draw;
+        pluginInterface.UiBuilder.OpenConfigUi += () => ui.IsVisible = true;
+
+        // Register commands
+        commandManager.AddHandler("/myplugin", new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Opens My Plugin"
+        });
+
+        // Listen for language changes
+        pluginInterface.LanguageChanged += OnLanguageChanged;
+
+        // Set up IPC
+        var ipcProvider = pluginInterface.GetIpcProvider<string, object>("MyPlugin.Event");
+        ipcProvider.RegisterAction(message => 
+        {
+            chatGui.Print($"IPC: {message}");
+        });
+    }
+
+    private void OnCommand(string command, string args)
+    {
+        ui.IsVisible = !ui.IsVisible;
+    }
+
+    private void OnLanguageChanged(string langCode)
+    {
+        chatGui.Print($"Language changed to: {langCode}");
+        ui.ReloadTranslations(langCode);
+    }
+
+    public void Dispose()
+    {
+        // Save configuration
+        pluginInterface.SavePluginConfig(config);
+
+        // Unregister events
+        pluginInterface.LanguageChanged -= OnLanguageChanged;
+        pluginInterface.UiBuilder.Draw -= ui.Draw;
+
+        // Remove commands
+        commandManager.RemoveHandler("/myplugin");
+
+        // Clean up UI
+        ui.Dispose();
+    }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Always Unsubscribe" icon="ban">
+  Always unsubscribe from events in `Dispose()`. Failing to do so causes memory leaks.
+</Card>
+
+<Card title="Check for Nulls" icon="circle-question">
+  Some properties may be null. Always check before using them.
+</Card>
+
+<Card title="Use IPC Carefully" icon="handshake">
+  IPC calls can throw exceptions if the other plugin isn't loaded. Wrap in try-catch.
+</Card>
+
+<Card title="Respect Load Reason" icon="flag">
+  Use `Reason` to adjust behavior. Don't show welcome messages on every reload.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="UI Builder" icon="window" href="/ui/ui-builder">
+  Learn how to create rich user interfaces with ImGui
+</Card>
+
+<Card title="IPC Overview" icon="network-wired" href="/ipc/overview">
+  Master inter-plugin communication
+</Card>
+
+<Card title="Services" icon="gears" href="/api/services/overview">
+  Explore all available Dalamud services
+</Card>
+
+<Card title="Debugging" icon="bug" href="/plugin-dev/debugging">
+  Learn how to debug your plugin effectively
+</Card>
+
+</CardGroup>

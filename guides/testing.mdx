@@ -1,0 +1,460 @@
+---
+title: Testing Dalamud
+description: Learn how to test Dalamud builds and validate changes
+---
+
+Testing is crucial for maintaining Dalamud's stability. This guide covers testing approaches for both development and contributions.
+
+## Test Framework
+
+Dalamud uses **xunit v3** for unit testing.
+
+```xml Dalamud.Test/Dalamud.Test.csproj
+<ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.v3.assert" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+</ItemGroup>
+```
+
+Test projects target `net10.0-windows` and reference the main Dalamud project.
+
+## Running Tests
+
+### Using Build Scripts
+
+<Tabs>
+  <Tab title="Windows">
+    ```powershell
+    # Run tests only
+    ./build.ps1 Test
+
+    # Build and test (CI target)
+    ./build.ps1 CI
+    ```
+  </Tab>
+  <Tab title="Command Line">
+    ```bash
+    # Using dotnet CLI
+    dotnet test Dalamud.Test/Dalamud.Test.csproj --configuration Release
+
+    # With verbose output
+    dotnet test Dalamud.Test/Dalamud.Test.csproj -v detailed
+
+    # Run specific test
+    dotnet test --filter "FullyQualifiedName~LocalizationTests"
+    ```
+  </Tab>
+</Tabs>
+
+### NUKE Build Targets
+
+The Test target in the build system:
+
+```csharp build/DalamudBuild.cs
+Target Test => _ => _
+    .DependsOn(Compile)
+    .Executes(() =>
+    {
+        DotNetTasks.DotNetTest(s => s
+            .SetProjectFile(TestProjectFile)
+            .SetConfiguration(Configuration)
+            .AddProperty("WarningLevel", "0")
+            .EnableNoRestore());
+    });
+```
+
+This ensures:
+- Full compilation before testing
+- Tests run with same configuration (Debug/Release)
+- No package restore during test execution
+
+## Test Structure
+
+Tests are organized in the `Dalamud.Test` project:
+
+```
+Dalamud.Test/
+├── Game/
+│   ├── Text/
+│   │   ├── SeStringHandling/
+│   │   │   ├── SeStringTests.cs
+│   │   │   └── SeStringManagerTests.cs
+│   │   └── Sanitizer/
+│   │       └── SanitizerTests.cs
+│   ├── GameVersionTests.cs
+│   └── GameVersionConverterTests.cs
+├── Storage/
+│   └── ReliableFileStorageTests.cs
+└── LocalizationTests.cs
+```
+
+## Writing Unit Tests
+
+### Basic Test Structure
+
+<CodeGroup>
+```csharp Example Test Class
+using System.IO;
+using System.Reflection;
+using Xunit;
+
+namespace Dalamud.Test
+{
+    public class LocalizationTests
+    {
+        private readonly Localization localization;
+        private string currentLangCode;
+
+        public LocalizationTests()
+        {
+            // Setup in constructor
+            var workingDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            this.localization = new Localization(workingDir, "dalamud_");
+            this.localization.LocalizationChanged += code => this.currentLangCode = code;
+        }
+
+        [Fact]
+        public void SetupWithFallbacks_EventInvoked()
+        {
+            // Arrange & Act
+            this.localization.SetupWithFallbacks();
+            
+            // Assert
+            Assert.Equal("en", this.currentLangCode);
+        }
+    }
+}
+```
+
+```csharp Theory Tests
+using Xunit;
+
+public class GameVersionTests
+{
+    [Theory]
+    [InlineData("2024.01.01.0000.0000", 2024, 1, 1)]
+    [InlineData("2023.12.31.2359.5959", 2023, 12, 31)]
+    public void Parse_ValidFormat_ReturnsCorrectVersion(string input, int year, int month, int day)
+    {
+        var version = GameVersion.Parse(input);
+        
+        Assert.Equal(year, version.Year);
+        Assert.Equal(month, version.Month);
+        Assert.Equal(day, version.Day);
+    }
+}
+```
+</CodeGroup>
+
+### Test Attributes
+
+| Attribute | Purpose | Example |
+|-----------|---------|----------|
+| `[Fact]` | Single test case | `[Fact] public void Test() { }` |
+| `[Theory]` | Data-driven test | `[Theory] [InlineData(1)] public void Test(int x) { }` |
+| `[InlineData]` | Provides test data | `[InlineData("input", "expected")]` |
+| `[Skip]` | Skip test | `[Fact(Skip = "Not implemented")]` |
+
+### Assertions
+
+```csharp Common Assertions
+using Xunit;
+
+// Equality
+Assert.Equal(expected, actual);
+Assert.NotEqual(value1, value2);
+
+// Nullability
+Assert.Null(value);
+Assert.NotNull(value);
+
+// Boolean
+Assert.True(condition);
+Assert.False(condition);
+
+// Collections
+Assert.Empty(collection);
+Assert.NotEmpty(collection);
+Assert.Contains(item, collection);
+Assert.All(collection, item => Assert.NotNull(item));
+
+// Exceptions
+Assert.Throws<InvalidOperationException>(() => MethodThatThrows());
+
+// Types
+Assert.IsType<MyType>(obj);
+Assert.IsAssignableFrom<IMyInterface>(obj);
+```
+
+## Integration Testing
+
+<Warning>
+Dalamud cannot be fully tested without FFXIV running due to its nature as an in-game framework.
+</Warning>
+
+### Testing Strategies
+
+<Steps>
+  <Step title="Unit test pure logic">
+    Test components that don't require game context:
+    - String parsing (SeString, game versions)
+    - Data structures and algorithms
+    - Configuration serialization
+    - Localization loading
+  </Step>
+
+  <Step title="Use mocking for game dependencies">
+    For code that interacts with game state:
+    ```csharp
+    // Create mock implementations of game interfaces
+    public class MockGameGui : IGameGui
+    {
+        public bool IsHovered { get; set; }
+        // Implement other interface members
+    }
+    ```
+  </Step>
+
+  <Step title="Manual testing in-game">
+    Critical for:
+    - UI components and overlays
+    - Game hooks and detours
+    - Plugin loading and unloading
+    - Chat and network functionality
+  </Step>
+</Steps>
+
+### Testing with Dalamud.CorePlugin
+
+The `Dalamud.CorePlugin` project serves as an internal testbed:
+
+```xml Dalamud.CorePlugin/Dalamud.CorePlugin.csproj
+<ItemGroup>
+    <ProjectReference Include="..\Dalamud\Dalamud.csproj" />
+</ItemGroup>
+```
+
+**Purpose:**
+- Access Dalamud internals during development
+- Prototype new API features before making them public
+- Test plugin-like functionality with privileged access
+
+## CI/CD Testing
+
+### GitHub Actions Workflow
+
+Tests run automatically on every push and PR:
+
+```yaml .github/workflows/main.yml
+- name: Build and Test Dalamud
+  run: .\build.ps1 ci
+```
+
+### API Compatibility Checks
+
+Pull requests automatically verify API compatibility:
+
+```yaml API Compatibility Workflow
+- name: "Verify Compatibility"
+  run: |
+    $FILES_TO_VALIDATE = "Dalamud.dll","FFXIVClientStructs.dll","Lumina.dll","Lumina.Excel.dll"
+    
+    foreach ($file in $FILES_TO_VALIDATE) {
+        apicompat -l "left\${file}" -r "right\${file}" --noWarn "CP0006"
+    }
+```
+
+This compares:
+- **Left**: Current staging build from distribution
+- **Right**: Proposed changes in the PR
+
+<Warning>
+API breaking changes will cause the compatibility check to fail.
+</Warning>
+
+## Manual Testing Checklist
+
+### Before Submitting a PR
+
+<AccordionGroup>
+  <Accordion title="Core Functionality">
+    - [ ] Dalamud loads successfully via XIVLauncher
+    - [ ] All existing plugins continue to work
+    - [ ] No crashes during normal gameplay
+    - [ ] Game hooks function correctly
+    - [ ] Plugin installer works
+  </Accordion>
+
+  <Accordion title="UI Components">
+    - [ ] Settings window displays properly
+    - [ ] Plugin windows render correctly
+    - [ ] No UI scaling issues
+    - [ ] ImGui overlays work in windowed/fullscreen
+    - [ ] Color schemes apply correctly
+  </Accordion>
+
+  <Accordion title="Plugin API Changes">
+    - [ ] Sample plugin compiles against changes
+    - [ ] Breaking changes documented
+    - [ ] Migration path provided for developers
+    - [ ] API documentation updated
+  </Accordion>
+
+  <Accordion title="Performance">
+    - [ ] No significant FPS drops
+    - [ ] Memory usage is reasonable
+    - [ ] No memory leaks over extended play
+    - [ ] Network performance unchanged
+  </Accordion>
+</AccordionGroup>
+
+## Debugging Tests
+
+### Visual Studio
+
+<Steps>
+  <Step title="Open Test Explorer">
+    View → Test Explorer (Ctrl+E, T)
+  </Step>
+
+  <Step title="Set breakpoints">
+    Add breakpoints in your test code
+  </Step>
+
+  <Step title="Debug test">
+    Right-click test → Debug
+  </Step>
+</Steps>
+
+### Command Line
+
+```bash
+# Debug with verbose output
+dotnet test --logger "console;verbosity=detailed"
+
+# Run with debugger attached (VSCode)
+dotnet test --logger "console" --environment VSTEST_HOST_DEBUG=1
+
+# Generate code coverage
+dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
+```
+
+## Test Coverage
+
+While Dalamud doesn't enforce coverage requirements, aim for:
+
+<Card title="Coverage Goals" icon="bullseye">
+  - **Critical paths**: 80%+ coverage
+  - **Public APIs**: All major code paths tested
+  - **Bug fixes**: Regression tests for each fix
+  - **Utilities**: High coverage for pure functions
+</Card>
+
+### Measuring Coverage
+
+Using Coverlet:
+
+```bash
+dotnet test /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:CoverletOutput=./coverage/
+
+# Generate HTML report
+reportgenerator -reports:./coverage/coverage.cobertura.xml \
+                -targetdir:./coverage/report \
+                -reporttypes:Html
+```
+
+## Performance Testing
+
+### Benchmarking with BenchmarkDotNet
+
+For performance-critical code:
+
+```csharp
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
+
+[MemoryDiagnoser]
+public class SeStringBenchmarks
+{
+    private readonly byte[] testData;
+    
+    [Benchmark]
+    public void ParseSeString()
+    {
+        var result = SeString.Parse(testData);
+    }
+}
+
+// Run benchmarks
+BenchmarkRunner.Run<SeStringBenchmarks>();
+```
+
+## Troubleshooting Test Failures
+
+<AccordionGroup>
+  <Accordion title="Test discovery fails">
+    **Symptoms:** No tests appear in Test Explorer
+
+    **Solutions:**
+    - Rebuild the solution
+    - Clear Test Explorer cache
+    - Verify xunit.v3 packages are restored
+    - Check test class is public
+  </Accordion>
+
+  <Accordion title="Tests pass locally but fail in CI">
+    **Common causes:**
+    - Environment differences (paths, culture, timezone)
+    - Missing test data files
+    - Platform-specific behavior
+
+    **Debug approach:**
+    - Check CI logs for error details
+    - Ensure test data is included in project
+    - Use `[Fact(Skip = "CI only")]` for problematic tests
+  </Accordion>
+
+  <Accordion title="Intermittent test failures">
+    **Common causes:**
+    - Race conditions in async code
+    - Shared state between tests
+    - Time-dependent assertions
+
+    **Solutions:**
+    - Use proper async/await patterns
+    - Ensure test isolation
+    - Avoid `Thread.Sleep`, use proper synchronization
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Fast Tests" icon="gauge-high">
+    Keep unit tests fast (&lt;1s each). Move slow tests to integration category.
+  </Card>
+  <Card title="Isolated Tests" icon="cube">
+    Each test should be independent. Don't rely on test execution order.
+  </Card>
+  <Card title="Clear Names" icon="signature">
+    Use descriptive test names: `MethodName_Scenario_ExpectedBehavior`
+  </Card>
+  <Card title="Arrange-Act-Assert" icon="list-check">
+    Structure tests clearly: setup, execute, verify.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building Dalamud" icon="hammer" href="/guides/building-dalamud">
+    Learn how to build from source
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/guides/contributing">
+    Submit your tested changes
+  </Card>
+</CardGroup>

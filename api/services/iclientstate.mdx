@@ -1,0 +1,312 @@
+---
+title: IClientState
+description: Access game client state, territory information, and character events
+---
+
+## Overview
+
+`IClientState` represents the state of the game client at the time of access. It provides information about the current territory, login state, and fires events when the player's state changes.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Events
+
+### ZoneInit
+
+```csharp
+public event Action<ZoneInitEventArgs> ZoneInit;
+```
+
+Fired when the game initializes a zone.
+
+### TerritoryChanged
+
+```csharp
+public event Action<ushort> TerritoryChanged;
+```
+
+Fired when the current Territory changes.
+
+<ParamField path="territoryType" type="ushort">
+  The new territory type ID
+</ParamField>
+
+### MapIdChanged
+
+```csharp
+public event Action<uint> MapIdChanged;
+```
+
+Fired when the current Map changes.
+
+<ParamField path="mapId" type="uint">
+  The new map ID
+</ParamField>
+
+### InstanceChanged
+
+```csharp
+public event Action<uint> InstanceChanged;
+```
+
+Fired when the current zone Instance changes.
+
+<ParamField path="instance" type="uint">
+  The new instance number
+</ParamField>
+
+### ClassJobChanged
+
+```csharp
+public event ClassJobChangeDelegate? ClassJobChanged;
+```
+
+Fired when a character's ClassJob changes.
+
+<ParamField path="classJobId" type="uint">
+  The new ClassJob ID
+</ParamField>
+
+### LevelChanged
+
+```csharp
+public event LevelChangeDelegate? LevelChanged;
+```
+
+Fired when any character level changes, including levels for non-active ClassJobs (e.g., PvP matches, DoH/DoL).
+
+<ParamField path="classJobId" type="uint">
+  The ClassJob ID
+</ParamField>
+
+<ParamField path="level" type="uint">
+  The new level of the corresponding ClassJob
+</ParamField>
+
+### Login
+
+```csharp
+public event Action Login;
+```
+
+Fired when a character is logging in, and the local character object is available.
+
+### Logout
+
+```csharp
+public event LogoutDelegate Logout;
+```
+
+Fired when a character is logging out.
+
+<ParamField path="type" type="int">
+  The type of logout
+</ParamField>
+
+<ParamField path="code" type="int">
+  The success/failure code
+</ParamField>
+
+### EnterPvP
+
+```csharp
+public event Action EnterPvP;
+```
+
+Fired when a character is entering PvP.
+
+### LeavePvP
+
+```csharp
+public event Action LeavePvP;
+```
+
+Fired when a character is leaving PvP.
+
+### CfPop
+
+```csharp
+public event Action<Lumina.Excel.Sheets.ContentFinderCondition> CfPop;
+```
+
+Fired when a duty is ready.
+
+<ParamField path="condition" type="ContentFinderCondition">
+  The Content Finder condition for the ready duty
+</ParamField>
+
+## Properties
+
+### ClientLanguage
+
+```csharp
+public ClientLanguage ClientLanguage { get; }
+```
+
+Gets the language of the client.
+
+<ResponseField name="ClientLanguage" type="ClientLanguage">
+  The client's language setting
+</ResponseField>
+
+### TerritoryType
+
+```csharp
+public ushort TerritoryType { get; }
+```
+
+Gets the current Territory the player resides in.
+
+<ResponseField name="TerritoryType" type="ushort">
+  The current territory type ID
+</ResponseField>
+
+### MapId
+
+```csharp
+public uint MapId { get; }
+```
+
+Gets the current Map the player resides in.
+
+<ResponseField name="MapId" type="uint">
+  The current map ID
+</ResponseField>
+
+### Instance
+
+```csharp
+public uint Instance { get; }
+```
+
+Gets the instance number of the current zone, used when multiple copies of an area are active.
+
+<ResponseField name="Instance" type="uint">
+  The instance number
+</ResponseField>
+
+### IsLoggedIn
+
+```csharp
+public bool IsLoggedIn { get; }
+```
+
+Gets a value indicating whether a character is logged in.
+
+<ResponseField name="IsLoggedIn" type="bool">
+  True if a character is logged in
+</ResponseField>
+
+### IsPvP
+
+```csharp
+public bool IsPvP { get; }
+```
+
+Gets a value indicating whether the user is playing PvP.
+
+<ResponseField name="IsPvP" type="bool">
+  True if in PvP
+</ResponseField>
+
+### IsPvPExcludingDen
+
+```csharp
+public bool IsPvPExcludingDen { get; }
+```
+
+Gets a value indicating whether the user is playing PvP, excluding the Wolves' Den.
+
+<ResponseField name="IsPvPExcludingDen" type="bool">
+  True if in PvP excluding Wolves' Den
+</ResponseField>
+
+### IsGPosing
+
+```csharp
+public bool IsGPosing { get; }
+```
+
+Gets a value indicating whether the client is currently in Group Pose (GPose) mode.
+
+<ResponseField name="IsGPosing" type="bool">
+  True if in GPose mode
+</ResponseField>
+
+## Methods
+
+### IsClientIdle
+
+```csharp
+public bool IsClientIdle(out ConditionFlag blockingFlag);
+public bool IsClientIdle();
+```
+
+Checks whether the client is currently "idle". This means a player is not logged in, or is not actively in combat or doing anything that we may not want to disrupt.
+
+<ParamField path="blockingFlag" type="ConditionFlag">
+  An outvar containing the first observed condition blocking the "idle" state. 0 if idle.
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the client is idle
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IClientState clientState;
+    
+    public MyPlugin(IClientState clientState)
+    {
+        this.clientState = clientState;
+        
+        // Subscribe to territory changes
+        this.clientState.TerritoryChanged += OnTerritoryChanged;
+        this.clientState.Login += OnLogin;
+        this.clientState.Logout += OnLogout;
+    }
+    
+    private void OnTerritoryChanged(ushort territoryId)
+    {
+        // Called when player changes zones
+        Log.Information($"Changed to territory: {territoryId}");
+    }
+    
+    private void OnLogin()
+    {
+        // Called when player logs in
+        Log.Information("Player logged in");
+        
+        if (this.clientState.IsPvP)
+        {
+            Log.Information("Player is in PvP");
+        }
+    }
+    
+    private void OnLogout(int type, int code)
+    {
+        // Called when player logs out
+        Log.Information($"Player logged out: type={type}, code={code}");
+    }
+    
+    public void Dispose()
+    {
+        this.clientState.TerritoryChanged -= OnTerritoryChanged;
+        this.clientState.Login -= OnLogin;
+        this.clientState.Logout -= OnLogout;
+    }
+}
+```
+
+## Remarks
+
+- The `LocalPlayer` and `LocalContentId` properties are deprecated. Use `IPlayerState` or `IObjectTable.LocalPlayer` instead.
+- Always unsubscribe from events in your plugin's `Dispose()` method to prevent memory leaks.
+- Territory and map changes may occur during loading screens.

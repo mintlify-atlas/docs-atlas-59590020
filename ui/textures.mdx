@@ -1,0 +1,533 @@
+---
+title: Textures
+description: Loading and displaying textures from game resources, files, and memory
+---
+
+The `ITextureProvider` service allows you to load and display textures from various sources including game resources, files, and memory. It handles texture lifecycle management and provides both shared and exclusive texture access patterns.
+
+## Getting the Texture Provider
+
+Access the texture provider service through plugin services:
+
+```csharp
+[PluginService]
+private ITextureProvider TextureProvider { get; set; } = null!;
+```
+
+## Loading Textures
+
+### From Game Icons
+
+Load game UI icons by their ID:
+
+```csharp
+using Dalamud.Interface.Textures;
+
+private void DrawUI()
+{
+    // Get a shared texture for a game icon
+    var iconTexture = this.TextureProvider.GetFromGameIcon(new GameIconLookup(60001));
+    
+    // Use the texture if available
+    if (iconTexture.TryGetWrap(out var texture, out _))
+    {
+        ImGui.Image(texture.ImGuiHandle, new Vector2(48, 48));
+    }
+}
+```
+
+<Note>
+  Shared textures from `GetFromGameIcon` and similar methods are managed by Dalamud and do not need to be disposed.
+</Note>
+
+### Icon with High Quality
+
+```csharp
+var iconTexture = this.TextureProvider.GetFromGameIcon(new GameIconLookup
+{
+    IconId = 60001,
+    HiRes = true  // Load high resolution version
+});
+```
+
+### From Game Paths
+
+Load any texture from the game's virtual file system:
+
+```csharp
+// Load UI texture
+var texture = this.TextureProvider.GetFromGame("ui/icon/060000/060001_hr1.tex");
+
+// Load equipment texture
+var texture = this.TextureProvider.GetFromGame("chara/equipment/e0001/model/c0201e0001_met_a.tex");
+```
+
+### From File System
+
+Load textures from local files:
+
+```csharp
+// From absolute path
+var texture = this.TextureProvider.GetFromFile(@"C:\textures\myicon.png");
+
+// From FileInfo
+var fileInfo = new FileInfo(@"C:\textures\myicon.png");
+var texture = this.TextureProvider.GetFromFile(fileInfo);
+
+// Using absolute path method
+var texture = this.TextureProvider.GetFromFileAbsolute(@"C:\textures\myicon.png");
+```
+
+Supported formats: PNG, JPG, BMP, TGA, DDS, and game TEX files.
+
+### From Embedded Resources
+
+Load textures from assembly manifest resources:
+
+```csharp
+var texture = this.TextureProvider.GetFromManifestResource(
+    Assembly.GetExecutingAssembly(),
+    "MyPlugin.Resources.icon.png");
+```
+
+## Creating Textures
+
+Unlike `Get` methods which return shared textures, `Create` methods return new textures that you own and must dispose.
+
+### From Raw Bytes
+
+```csharp
+byte[] imageData = File.ReadAllBytes("image.png");
+
+var texture = await this.TextureProvider.CreateFromImageAsync(imageData);
+// Use texture
+texture.Dispose(); // Must dispose when done
+```
+
+### From Stream
+
+```csharp
+using var stream = File.OpenRead("image.png");
+var texture = await this.TextureProvider.CreateFromImageAsync(
+    stream,
+    leaveOpen: false);
+```
+
+### From Raw Pixel Data
+
+```csharp
+using Dalamud.Interface.Textures;
+
+// Create 64x64 RGBA texture
+var pixels = new byte[64 * 64 * 4];
+// Fill pixels...
+
+var spec = new RawImageSpecification
+{
+    Width = 64,
+    Height = 64,
+    Format = RawImageFormat.Rgba32
+};
+
+var texture = this.TextureProvider.CreateFromRaw(spec, pixels);
+```
+
+### Empty Texture
+
+Create an empty texture to fill later:
+
+```csharp
+var spec = new RawImageSpecification
+{
+    Width = 256,
+    Height = 256,
+    Format = RawImageFormat.Rgba32
+};
+
+var texture = this.TextureProvider.CreateEmpty(
+    spec,
+    cpuRead: true,   // Allow reading from CPU
+    cpuWrite: true); // Allow writing from CPU
+```
+
+## Displaying Textures
+
+### Basic Image Display
+
+```csharp
+private ISharedImmediateTexture iconTexture;
+
+public void Initialize()
+{
+    this.iconTexture = this.TextureProvider.GetFromGameIcon(new GameIconLookup(60001));
+}
+
+public void DrawUI()
+{
+    if (this.iconTexture.TryGetWrap(out var texture, out var error))
+    {
+        // Display at original size
+        ImGui.Image(texture.ImGuiHandle, new Vector2(texture.Width, texture.Height));
+    }
+    else if (error != null)
+    {
+        ImGui.Text($"Failed to load: {error}");
+    }
+}
+```
+
+### Scaled Image
+
+```csharp
+if (iconTexture.TryGetWrap(out var texture, out _))
+{
+    // Scale to 64x64
+    ImGui.Image(texture.ImGuiHandle, new Vector2(64, 64));
+}
+```
+
+### Image with UV Coordinates
+
+```csharp
+// Display only part of the texture
+ImGui.Image(
+    texture.ImGuiHandle,
+    new Vector2(128, 128),
+    new Vector2(0, 0),      // UV min
+    new Vector2(0.5f, 0.5f) // UV max (top-left quarter)
+);
+```
+
+### Image with Tint
+
+```csharp
+// White tint = normal colors
+var tintColor = new Vector4(1, 1, 1, 1);
+
+// Border color
+var borderColor = new Vector4(1, 0, 0, 1); // Red border
+
+ImGui.Image(
+    texture.ImGuiHandle,
+    new Vector2(64, 64),
+    Vector2.Zero,
+    Vector2.One,
+    tintColor,
+    borderColor
+);
+```
+
+### Image Button
+
+```csharp
+if (texture.TryGetWrap(out var wrap, out _))
+{
+    if (ImGui.ImageButton(wrap.ImGuiHandle, new Vector2(48, 48)))
+    {
+        // Button clicked
+    }
+}
+```
+
+## Shared Textures
+
+Shared textures are reference-counted and managed by Dalamud:
+
+```csharp
+// Getting a shared texture (doesn't need disposal by default)
+var sharedTexture = this.TextureProvider.GetFromGameIcon(new GameIconLookup(60001));
+
+// Rent a reference if you need to keep it longer
+var rentedTexture = await sharedTexture.RentAsync();
+// Now you must dispose rentedTexture when done
+rentedTexture.Dispose();
+```
+
+### Checking Texture State
+
+```csharp
+var texture = this.TextureProvider.GetFromGameIcon(new GameIconLookup(60001));
+
+// Try to get the wrap
+if (texture.TryGetWrap(out var wrap, out var error))
+{
+    // Success - use wrap
+    var width = wrap.Width;
+    var height = wrap.Height;
+}
+else
+{
+    // Failed or still loading
+    if (error != null)
+    {
+        // Error loading
+    }
+    else
+    {
+        // Still loading
+    }
+}
+```
+
+### Async Texture Loading
+
+```csharp
+var texture = this.TextureProvider.GetFromGameIcon(new GameIconLookup(60001));
+
+// Get or wait for texture
+var wrap = await texture.GetWrapAsync();
+
+// Use wrap (valid for current frame)
+ImGui.Image(wrap.ImGuiHandle, new Vector2(48, 48));
+```
+
+## Texture Wraps
+
+Texture wraps provide access to the underlying DirectX texture:
+
+```csharp
+if (texture.TryGetWrap(out var wrap, out _))
+{
+    nint handle = wrap.ImGuiHandle;  // For ImGui
+    int width = wrap.Width;
+    int height = wrap.Height;
+    
+    // For advanced scenarios
+    nint shaderResourceView = wrap.ShaderResourceView;
+}
+```
+
+<Warning>
+  Texture wraps obtained from `TryGetWrap` are only valid for the current frame. Don't store them - store the `ISharedImmediateTexture` instead.
+</Warning>
+
+## Advanced Texture Operations
+
+### Modify Existing Texture
+
+```csharp
+var sourceTexture = await this.TextureProvider.CreateFromImageAsync(imageBytes);
+
+// Create modified copy
+var modifiedTexture = await this.TextureProvider.CreateFromExistingTextureAsync(
+    sourceTexture,
+    new TextureModificationArgs
+    {
+        // Crop to region
+        SourceRect = new Rectangle(10, 10, 100, 100),
+        
+        // Resize
+        TargetSize = new Size(50, 50),
+        
+        // Convert format
+        TargetFormat = RawImageFormat.Bgra32
+    },
+    leaveWrapOpen: false // Dispose source after copy
+);
+```
+
+### Capture ImGui Viewport
+
+```csharp
+// Capture the game screen
+var screenshot = await this.TextureProvider.CreateFromImGuiViewportAsync(
+    new ImGuiViewportTextureArgs
+    {
+        ViewportId = ImGui.GetMainViewport().ID,
+        OnlyAlpha = false
+    }
+);
+```
+
+### From Clipboard
+
+Get image from clipboard:
+
+```csharp
+if (this.TextureProvider.HasClipboardImage())
+{
+    var clipboardTexture = await this.TextureProvider.CreateFromClipboardAsync();
+    // Use texture
+    clipboardTexture.Dispose();
+}
+```
+
+### Draw List Textures
+
+Create a texture that can be rendered to:
+
+```csharp
+var renderTexture = this.TextureProvider.CreateDrawListTexture();
+renderTexture.Size = new Vector2(512, 512);
+
+// Render ImGui content to the texture
+renderTexture.Draw(drawList =>
+{
+    drawList.AddCircleFilled(new Vector2(256, 256), 100, 0xFF0000FF);
+});
+
+// Display the rendered texture
+ImGui.Image(renderTexture.Handle, new Vector2(512, 512));
+
+renderTexture.Dispose();
+```
+
+## Game-Specific Features
+
+### Getting Icon Path
+
+```csharp
+if (this.TextureProvider.TryGetIconPath(
+    new GameIconLookup(60001),
+    out var path))
+{
+    // path = "ui/icon/060000/060001.tex"
+}
+```
+
+### Format Support
+
+Check if a DXGI format is supported:
+
+```csharp
+if (this.TextureProvider.IsDxgiFormatSupported(28)) // DXGI_FORMAT_R8G8B8A8_UNORM
+{
+    // Format is supported
+}
+```
+
+### Convert to Kernel Texture
+
+For advanced game integration:
+
+```csharp
+var texture = await this.TextureProvider.CreateFromImageAsync(bytes);
+nint kernelTexture = this.TextureProvider.ConvertToKernelTexture(
+    texture,
+    leaveWrapOpen: false
+);
+```
+
+<Warning>
+  Kernel textures are for advanced use cases involving direct game UI manipulation. Use with caution.
+</Warning>
+
+## Best Practices
+
+<Steps>
+
+### Use Shared Textures When Possible
+
+Prefer `Get` methods over `Create` methods for commonly used textures.
+
+### Cache Texture References
+
+Store `ISharedImmediateTexture` references, not `IDalamudTextureWrap` instances.
+
+### Dispose Created Textures
+
+Always dispose textures created with `Create` methods.
+
+### Check Availability
+
+Always use `TryGetWrap` to check if a texture is ready before using it.
+
+### Handle Loading State
+
+Show loading indicators or placeholders while textures load.
+
+### Use Appropriate Sizes
+
+Scale images appropriately - don't load huge textures if you only need small icons.
+
+</Steps>
+
+## Complete Example
+
+```csharp
+using System.Numerics;
+using Dalamud.Interface.Textures;
+using Dalamud.Plugin.Services;
+
+public class TextureExample : IDisposable
+{
+    private ITextureProvider TextureProvider { get; init; }
+    
+    // Shared textures (no disposal needed)
+    private ISharedImmediateTexture jobIcon;
+    private ISharedImmediateTexture gearIcon;
+    
+    // Created texture (must dispose)
+    private IDalamudTextureWrap? customTexture;
+    
+    public TextureExample(ITextureProvider textureProvider)
+    {
+        this.TextureProvider = textureProvider;
+        
+        // Load game icons
+        this.jobIcon = textureProvider.GetFromGameIcon(new GameIconLookup(62101)); // Paladin
+        this.gearIcon = textureProvider.GetFromGameIcon(new GameIconLookup(60001));
+    }
+    
+    public async Task LoadCustomTextureAsync()
+    {
+        // Load custom texture from file
+        var imageBytes = File.ReadAllBytes("custom.png");
+        this.customTexture = await this.TextureProvider.CreateFromImageAsync(imageBytes);
+    }
+    
+    public void DrawUI()
+    {
+        ImGui.Begin("Texture Example");
+        
+        // Display game icons
+        ImGui.Text("Job Icon:");
+        if (this.jobIcon.TryGetWrap(out var jobWrap, out _))
+        {
+            ImGui.Image(jobWrap.ImGuiHandle, new Vector2(48, 48));
+        }
+        else
+        {
+            ImGui.Text("Loading...");
+        }
+        
+        ImGui.SameLine();
+        ImGui.Text("Gear Icon:");
+        if (this.gearIcon.TryGetWrap(out var gearWrap, out _))
+        {
+            if (ImGui.ImageButton(gearWrap.ImGuiHandle, new Vector2(48, 48)))
+            {
+                // Icon clicked
+            }
+        }
+        
+        // Display custom texture
+        if (this.customTexture != null)
+        {
+            ImGui.Separator();
+            ImGui.Text("Custom Texture:");
+            ImGui.Image(
+                this.customTexture.ImGuiHandle,
+                new Vector2(this.customTexture.Width, this.customTexture.Height)
+            );
+        }
+        
+        ImGui.End();
+    }
+    
+    public void Dispose()
+    {
+        // Only dispose created textures
+        this.customTexture?.Dispose();
+        
+        // Shared textures don't need disposal
+    }
+}
+```
+
+## See Also
+
+- [UiBuilder](/ui/ui-builder) - Core UI interface
+- [ImGui Basics](/ui/imgui-basics) - Basic ImGui usage
+- [Fonts](/ui/fonts) - Working with fonts
+- [Notifications](/ui/notifications) - Using notification icons

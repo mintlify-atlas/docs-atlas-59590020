@@ -1,0 +1,487 @@
+---
+title: Framework
+description: Execute code on the game's main thread and handle framework updates
+---
+
+The `IFramework` service represents the framework of the native game client and provides methods to run code on the game's main thread safely.
+
+## Getting Started
+
+Inject the service into your plugin:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IFramework framework;
+
+    public MyPlugin(IFramework framework)
+    {
+        this.framework = framework;
+        
+        // Subscribe to framework updates
+        this.framework.Update += OnFrameworkUpdate;
+    }
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        // Called every frame
+        var delta = framework.UpdateDelta;
+    }
+
+    public void Dispose()
+    {
+        this.framework.Update -= OnFrameworkUpdate;
+    }
+}
+```
+
+## Events
+
+### Update
+
+Event that gets fired every time the game framework updates.
+
+```csharp
+event OnUpdateDelegate Update
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void OnUpdateDelegate(IFramework framework)
+```
+
+**Example:**
+
+```csharp
+framework.Update += (fw) =>
+{
+    var timeSinceLastUpdate = fw.UpdateDelta;
+    // Update logic here
+};
+```
+
+<Warning>
+  The Update event fires every frame. Be careful with performance-intensive operations.
+</Warning>
+
+## Properties
+
+### LastUpdate
+
+Gets the last time that the Framework Update event was triggered.
+
+```csharp
+DateTime LastUpdate { get; }
+```
+
+### LastUpdateUTC
+
+Gets the last time in UTC that the Framework Update event was triggered.
+
+```csharp
+DateTime LastUpdateUTC { get; }
+```
+
+### UpdateDelta
+
+Gets the delta between the last Framework Update and the currently executing one.
+
+```csharp
+TimeSpan UpdateDelta { get; }
+```
+
+**Example:**
+
+```csharp
+var fps = 1.0 / framework.UpdateDelta.TotalSeconds;
+chatGui.Print($"Current FPS: {fps:F1}");
+```
+
+### IsInFrameworkUpdateThread
+
+Gets a value indicating whether currently executing code is running in the game's framework update thread.
+
+```csharp
+bool IsInFrameworkUpdateThread { get; }
+```
+
+**Example:**
+
+```csharp
+if (!framework.IsInFrameworkUpdateThread)
+{
+    // Need to run on framework thread
+    await framework.Run(() => DoGameOperation());
+}
+```
+
+### IsFrameworkUnloading
+
+Gets a value indicating whether game Framework is unloading.
+
+```csharp
+bool IsFrameworkUnloading { get; }
+```
+
+## Methods
+
+### Run
+
+Run a given function right away if called from the game's framework update thread, or otherwise run on the next framework update call.
+
+```csharp
+Task Run(Action action, CancellationToken cancellationToken = default)
+Task<T> Run<T>(Func<T> action, CancellationToken cancellationToken = default)
+Task Run(Func<Task> action, CancellationToken cancellationToken = default)
+Task<T> Run<T>(Func<Task<T>> action, CancellationToken cancellationToken = default)
+```
+
+<ParamField path="action" type="Action | Func<T>" required>
+  Function to call
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken">
+  The cancellation token
+</ParamField>
+
+**Returns:** Task representing the pending or already completed function.
+
+**Example:**
+
+```csharp
+await framework.Run(() =>
+{
+    // This runs on the framework thread
+    UpdateGameState();
+});
+
+var result = await framework.Run(() =>
+{
+    return GetGameData();
+});
+```
+
+<Note>
+  Use `Run` when you need to use `await` and have your task keep executing on the main thread after waiting.
+</Note>
+
+### RunOnFrameworkThread
+
+Run a given function right away if called from the game's framework update thread, or otherwise run on the next framework update call.
+
+```csharp
+Task<T> RunOnFrameworkThread<T>(Func<T> func)
+Task RunOnFrameworkThread(Action action)
+```
+
+<ParamField path="func" type="Func<T> | Action" required>
+  Function to call
+</ParamField>
+
+**Returns:** Task representing the pending or already completed function.
+
+**Example:**
+
+```csharp
+var data = await framework.RunOnFrameworkThread(() =>
+{
+    return ReadGameMemory();
+});
+
+await framework.RunOnFrameworkThread(() =>
+{
+    ModifyGameState();
+});
+```
+
+<Note>
+  Use `RunOnFrameworkThread` when you need to call `Task.Wait()` or `Task.Result`. It skips the task scheduler if invoked already from the framework thread.
+</Note>
+
+### RunOnTick
+
+Run a given function in an upcoming framework tick call, with optional delay.
+
+```csharp
+Task<T> RunOnTick<T>(
+    Func<T> func,
+    TimeSpan delay = default,
+    int delayTicks = default,
+    CancellationToken cancellationToken = default)
+
+Task RunOnTick(
+    Action action,
+    TimeSpan delay = default,
+    int delayTicks = default,
+    CancellationToken cancellationToken = default)
+
+Task<T> RunOnTick<T>(
+    Func<Task<T>> func,
+    TimeSpan delay = default,
+    int delayTicks = default,
+    CancellationToken cancellationToken = default)
+
+Task RunOnTick(
+    Func<Task> func,
+    TimeSpan delay = default,
+    int delayTicks = default,
+    CancellationToken cancellationToken = default)
+```
+
+<ParamField path="func" type="Func<T> | Action" required>
+  Function to call
+</ParamField>
+
+<ParamField path="delay" type="TimeSpan">
+  Wait for given timespan before calling this function
+</ParamField>
+
+<ParamField path="delayTicks" type="int">
+  Count given number of framework tick calls before calling this function (takes precedence over delay)
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken">
+  Cancellation token which will prevent the execution if wait conditions are not met
+</ParamField>
+
+**Returns:** Task representing the pending function.
+
+**Example:**
+
+```csharp
+// Run after 5 seconds
+await framework.RunOnTick(
+    () => chatGui.Print("5 seconds passed!"),
+    delay: TimeSpan.FromSeconds(5));
+
+// Run after 60 frames
+await framework.RunOnTick(
+    () => chatGui.Print("60 frames passed!"),
+    delayTicks: 60);
+
+// With cancellation
+var cts = new CancellationTokenSource();
+await framework.RunOnTick(
+    () => DoWork(),
+    delay: TimeSpan.FromSeconds(10),
+    cancellationToken: cts.Token);
+```
+
+### DelayTicks
+
+Returns a task that completes after the given number of ticks.
+
+```csharp
+Task DelayTicks(long numTicks, CancellationToken cancellationToken = default)
+```
+
+<ParamField path="numTicks" type="long" required>
+  Number of ticks to delay
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken">
+  The cancellation token
+</ParamField>
+
+**Returns:** A task that completes after the specified number of ticks.
+
+**Example:**
+
+```csharp
+// Wait 30 frames
+await framework.DelayTicks(30);
+chatGui.Print("Waited 30 frames");
+
+// With cancellation
+var cts = new CancellationTokenSource();
+await framework.DelayTicks(100, cts.Token);
+```
+
+### GetTaskFactory
+
+Gets a TaskFactory that runs tasks during Framework Update event.
+
+```csharp
+TaskFactory GetTaskFactory()
+```
+
+**Returns:** The task factory.
+
+## Common Use Cases
+
+### Periodic Updates
+
+```csharp
+private TimeSpan timeSinceLastCheck = TimeSpan.Zero;
+private readonly TimeSpan checkInterval = TimeSpan.FromSeconds(1);
+
+private void OnFrameworkUpdate(IFramework fw)
+{
+    timeSinceLastCheck += fw.UpdateDelta;
+    
+    if (timeSinceLastCheck >= checkInterval)
+    {
+        timeSinceLastCheck = TimeSpan.Zero;
+        PerformPeriodicCheck();
+    }
+}
+```
+
+### Thread-Safe Game Data Access
+
+```csharp
+public async Task<PlayerData> GetPlayerDataAsync()
+{
+    // Safely read game data from any thread
+    return await framework.RunOnFrameworkThread(() =>
+    {
+        if (!clientState.IsLoggedIn)
+            return null;
+        
+        return new PlayerData
+        {
+            Name = clientState.LocalPlayer?.Name.ToString(),
+            Level = clientState.LocalPlayer?.Level ?? 0,
+            CurrentHP = clientState.LocalPlayer?.CurrentHp ?? 0
+        };
+    });
+}
+```
+
+### Delayed Execution
+
+```csharp
+public async Task ShowDelayedMessage(string message, float delaySeconds)
+{
+    await framework.RunOnTick(
+        () => chatGui.Print(message),
+        delay: TimeSpan.FromSeconds(delaySeconds));
+}
+
+public async Task AnimateOverFrames()
+{
+    for (int i = 0; i < 10; i++)
+    {
+        await framework.DelayTicks(5);
+        UpdateAnimation(i);
+    }
+}
+```
+
+### Conditional Framework Updates
+
+```csharp
+private bool needsUpdate = false;
+
+private void OnFrameworkUpdate(IFramework fw)
+{
+    if (!needsUpdate)
+        return;
+    
+    if (!clientState.IsLoggedIn)
+        return;
+    
+    UpdateGameOverlay();
+    needsUpdate = false;
+}
+
+public void RequestUpdate()
+{
+    needsUpdate = true;
+}
+```
+
+### Background Work with Framework Sync
+
+```csharp
+public async Task ProcessDataAsync()
+{
+    // Do heavy work off the framework thread
+    var results = await Task.Run(() =>
+    {
+        return PerformExpensiveCalculation();
+    });
+    
+    // Apply results on the framework thread
+    await framework.Run(() =>
+    {
+        ApplyResultsToGame(results);
+    });
+}
+```
+
+### Frame Rate Monitoring
+
+```csharp
+private readonly Queue<TimeSpan> frameDeltas = new();
+private const int SampleSize = 60;
+
+private void OnFrameworkUpdate(IFramework fw)
+{
+    frameDeltas.Enqueue(fw.UpdateDelta);
+    
+    if (frameDeltas.Count > SampleSize)
+        frameDeltas.Dequeue();
+    
+    var avgDelta = TimeSpan.FromTicks(
+        (long)frameDeltas.Average(d => d.Ticks));
+    var avgFps = 1.0 / avgDelta.TotalSeconds;
+}
+```
+
+### Cancellable Operations
+
+```csharp
+private CancellationTokenSource? operationCts;
+
+public void StartLongOperation()
+{
+    operationCts = new CancellationTokenSource();
+    
+    _ = framework.RunOnTick(async () =>
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            if (operationCts.Token.IsCancellationRequested)
+                break;
+            
+            ProcessStep(i);
+            await framework.DelayTicks(10, operationCts.Token);
+        }
+    }, cancellationToken: operationCts.Token);
+}
+
+public void CancelOperation()
+{
+    operationCts?.Cancel();
+}
+```
+
+## Choosing the Right Method
+
+### Use `Run` when:
+- You need to use `await` in your callback
+- You want continuations to remain on the framework thread
+- You're writing async code that interacts with the game
+
+### Use `RunOnFrameworkThread` when:
+- You need to call `Task.Wait()` or access `Task.Result`
+- You want to skip the task scheduler if already on the framework thread
+- You're calling from synchronous code
+
+### Use `RunOnTick` when:
+- You need to delay execution
+- You want precise frame-based timing
+- You need cancellation support for delayed operations
+
+<Warning>
+  Starting new tasks and waiting on them synchronously from framework callbacks will lock up the game. Always use `await` for asynchronous operations.
+</Warning>
+
+<Warning>
+  Awaiting `RunOnFrameworkThread`, `Run`, or `RunOnTick` directly or indirectly from within the callback passed to these functions can cause deadlocks.
+</Warning>

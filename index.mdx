@@ -1,97 +1,164 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Welcome to Dalamud"
+description: "A powerful plugin development framework for FFXIV that brings enhanced functionality and quality-of-life improvements to the game"
 ---
 
-## Setting up
+## What is Dalamud?
 
-Get your documentation site up and running in minutes.
+Dalamud is a plugin development framework for Final Fantasy XIV that provides developers with robust APIs for game data access, native interoperability, and UI customization. Built on .NET, Dalamud enables you to create powerful plugins that enhance the game experience while maintaining stability and performance.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Dalamud is designed to work seamlessly with [XIVLauncher](https://github.com/goatcorp/FFXIVQuickLauncher), which handles dependency management and plugin loading for end users.
 
-## Make it yours
+<Note>
+  If you're a player looking to **use** plugins (not develop them), you should [download XIVLauncher](https://goatcorp.github.io/) instead. This documentation is for plugin developers.
+</Note>
 
-Design a docs site that looks great and empowers your users.
+## Why Build with Dalamud?
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Rich API" icon="code" iconType="solid">
+    Access game state, chat, commands, UI overlays, and more through a comprehensive plugin API
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="ImGui Integration" icon="window" iconType="solid">
+    Draw custom windows and overlays using Dear ImGui with full font and texture support
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Game Data Access" icon="database" iconType="solid">
+    Query game sheets, items, NPCs, and other data through the integrated Lumina data manager
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="IPC System" icon="share-nodes" iconType="solid">
+    Share data and functionality between plugins using CallGate providers and subscribers
   </Card>
-</Columns>
+  <Card title="Service Injection" icon="syringe" iconType="solid">
+    Leverage dependency injection to access Dalamud services cleanly in your plugin classes
+  </Card>
+  <Card title="Active Community" icon="users" iconType="solid">
+    Join thousands of developers building plugins with support from the Dalamud Discord
+  </Card>
+</CardGroup>
 
-## Create beautiful pages
+## Get Started
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Set Up Your Environment">
+    Install the .NET SDK and required dependencies to start developing plugins locally.
+    
+    <Card title="Installation Guide" icon="download" href="/installation">
+      Follow our step-by-step setup guide
+    </Card>
+  </Step>
+  
+  <Step title="Create Your First Plugin">
+    Build a working plugin in minutes with our quickstart tutorial.
+    
+    <Card title="Quickstart Tutorial" icon="rocket" href="/quickstart">
+      Get your first plugin running
+    </Card>
+  </Step>
+  
+  <Step title="Explore the API">
+    Learn about the core services and capabilities available to your plugins.
+    
+    <Card title="API Documentation" icon="book" href="/api/services/overview">
+      Browse the full API reference
+    </Card>
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Core Concepts
 
-## Need inspiration?
+Understand the fundamental architecture of Dalamud plugins:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Plugin Lifecycle" icon="rotate" href="/concepts/plugin-lifecycle">
+    Learn how plugins are loaded, initialized, and disposed
+  </Card>
+  <Card title="Dependency Injection" icon="plug" href="/concepts/dependency-injection">
+    Use service injection to access Dalamud APIs elegantly
+  </Card>
+  <Card title="Service Locator" icon="magnifying-glass" href="/concepts/service-locator">
+    Access services dynamically when injection isn't available
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Understand how Dalamud loads into the game process
+  </Card>
+</CardGroup>
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion icon="message" title="Chat & Commands">
+    Register custom slash commands and interact with the game's chat system. Perfect for automation tools and chat enhancements.
+    
+    ```csharp
+    commandManager.AddHandler("/mycommand", new CommandInfo(OnCommand)
+    {
+        HelpMessage = "Does something awesome!"
+    });
+    ```
+  </Accordion>
+  
+  <Accordion icon="window-maximize" title="UI Overlays">
+    Create custom windows and overlays using ImGui. Build HUDs, configuration panels, and visualization tools.
+    
+    ```csharp
+    pluginInterface.UiBuilder.Draw += () =>
+    {
+        ImGui.Begin("My Plugin Window");
+        ImGui.Text("Hello from Dalamud!");
+        ImGui.End();
+    };
+    ```
+  </Accordion>
+  
+  <Accordion icon="gauge-high" title="Game State Monitoring">
+    Track player state, target information, party composition, and more in real-time.
+    
+    ```csharp
+    var player = clientState.LocalPlayer;
+    if (player != null)
+    {
+        var currentHP = player.CurrentHp;
+        var maxHP = player.MaxHp;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion icon="table" title="Data Queries">
+    Access game data sheets for items, actions, quests, and other game content.
+    
+    ```csharp
+    var item = dataManager.GetExcelSheet<Item>()?.GetRow(itemId);
+    if (item != null)
+    {
+        var itemName = item.Name.ToString();
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Community & Support
+
+<CardGroup cols={2}>
+  <Card title="Discord Server" icon="discord" href="https://discord.gg/3NMcUV5">
+    Join our active community for support and discussion
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/goatcorp/dalamud">
+    View the source code and contribute to Dalamud
+  </Card>
+  <Card title="Developer FAQ" icon="circle-question" href="https://goatcorp.github.io/faq/development">
+    Find answers to common development questions
+  </Card>
+  <Card title="Example Plugins" icon="code-branch" href="https://github.com/goatcorp/SamplePlugin">
+    Explore sample code and plugin templates
+  </Card>
+</CardGroup>
+
+<Warning>
+  **Important:** Dalamud and all plugins are third-party tools not affiliated with Square Enix. Use at your own discretion.
+</Warning>
+
+## What's Next?
+
+Ready to build your first plugin? Head over to our [Installation Guide](/installation) to set up your development environment, or jump straight into the [Quickstart Tutorial](/quickstart) if you already have everything configured.
+
+For a deeper understanding of Dalamud's architecture and design patterns, explore the [Core Concepts](/concepts/architecture) section.

@@ -1,122 +1,164 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Dalamud",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#7289DA",
+    "light": "#99AAB5",
+    "dark": "#2C2F33"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/goatcorp/dalamud"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/goatcorp/dalamud"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
               "index",
               "quickstart",
-              "development"
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/architecture",
+              "concepts/plugin-lifecycle",
+              "concepts/dependency-injection",
+              "concepts/service-locator"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Plugin Development",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "plugin-dev/getting-started",
+              "plugin-dev/creating-plugin",
+              "plugin-dev/plugin-manifest",
+              "plugin-dev/plugin-interface",
+              "plugin-dev/debugging"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "UI & ImGui",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "ui/ui-builder",
+              "ui/drawing-windows",
+              "ui/imgui-basics",
+              "ui/fonts",
+              "ui/textures",
+              "ui/notifications"
+            ]
+          },
+          {
+            "group": "Game Integration",
+            "pages": [
+              "game/client-state",
+              "game/chat",
+              "game/commands",
+              "game/framework",
+              "game/target-manager",
+              "game/data-manager",
+              "game/object-table"
+            ]
+          },
+          {
+            "group": "IPC & Shared Data",
+            "pages": [
+              "ipc/overview",
+              "ipc/callgate-provider",
+              "ipc/callgate-subscriber",
+              "ipc/data-sharing"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "advanced/hooking",
+              "advanced/memory",
+              "advanced/signatures",
+              "advanced/game-interop",
+              "advanced/client-structs"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/building-dalamud",
+              "guides/contributing",
+              "guides/testing",
+              "guides/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Plugin API",
             "pages": [
-              "api-reference/introduction"
+              "api/plugin/idalamudplugin",
+              "api/plugin/idalamudplugininterface",
+              "api/plugin/plugin-load-reason",
+              "api/plugin/installed-plugin-state"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Services",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/services/overview",
+              "api/services/iclientstate",
+              "api/services/ichatgui",
+              "api/services/icommandmanager",
+              "api/services/idatamanager",
+              "api/services/iframework",
+              "api/services/igamegui",
+              "api/services/itargetmanager",
+              "api/services/iobjecttable",
+              "api/services/itoastgui",
+              "api/services/inotificationmanager",
+              "api/services/ikeystate",
+              "api/services/igameinteropprovider",
+              "api/services/isigscanner",
+              "api/services/all-services"
+            ]
+          },
+          {
+            "group": "Interface",
+            "pages": [
+              "api/interface/iuibuilder",
+              "api/interface/ifonthandle",
+              "api/interface/itextureprovider"
+            ]
+          },
+          {
+            "group": "IPC",
+            "pages": [
+              "api/ipc/icallgateprovider",
+              "api/ipc/icallgatesubscriber"
+            ]
+          },
+          {
+            "group": "Game Types",
+            "pages": [
+              "api/game/clientlanguage",
+              "api/game/actionkind"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

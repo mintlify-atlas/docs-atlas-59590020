@@ -1,0 +1,651 @@
+---
+title: Fonts
+description: Working with fonts in Dalamud plugins using the Font Atlas system
+---
+
+Dalamud provides a powerful font system that allows you to load custom fonts, use game fonts, and manage font atlases for your plugin's UI.
+
+## Default Fonts
+
+Dalamud provides several built-in fonts that are ready to use:
+
+### Accessing Default Fonts
+
+```csharp
+// In your Draw method
+ImGui.PushFont(UiBuilder.DefaultFont);
+ImGui.Text("Text in default font");
+ImGui.PopFont();
+
+// Icon font (FontAwesome)
+ImGui.PushFont(UiBuilder.IconFont);
+ImGui.Text(FontAwesomeIcon.Cog.ToIconString());
+ImGui.PopFont();
+
+// Monospace font
+ImGui.PushFont(UiBuilder.MonoFont);
+ImGui.Text("Monospaced text");
+ImGui.PopFont();
+```
+
+### Default Font Handles
+
+Use font handles for safer, managed access:
+
+```csharp
+using (pluginInterface.UiBuilder.DefaultFontHandle.Push())
+{
+    ImGui.Text("Text in default font");
+}
+
+using (pluginInterface.UiBuilder.IconFontHandle.Push())
+{
+    ImGui.Text(FontAwesomeIcon.Save.ToIconString());
+}
+
+using (pluginInterface.UiBuilder.MonoFontHandle.Push())
+{
+    ImGui.Text("Code: var x = 42;");
+}
+```
+
+<Note>
+  Font handles automatically handle font availability and provide safer access than raw font pointers.
+</Note>
+
+### Default Font Sizes
+
+Get the default font size in your preferred unit:
+
+```csharp
+float sizePx = UiBuilder.DefaultFontSizePx;  // Pixels
+float sizePt = UiBuilder.DefaultFontSizePt;  // Points
+
+// From UiBuilder instance
+float sizePx = pluginInterface.UiBuilder.FontDefaultSizePx;
+float sizePt = pluginInterface.UiBuilder.FontDefaultSizePt;
+```
+
+## Font Atlas
+
+Every plugin automatically gets its own private font atlas through `UiBuilder.FontAtlas`. This allows you to load custom fonts without affecting other plugins.
+
+### Font Atlas Properties
+
+```csharp
+var fontAtlas = pluginInterface.UiBuilder.FontAtlas;
+
+// Check if fonts are ready
+if (fontAtlas.HasBuiltAtlas)
+{
+    // Atlas is built and ready
+}
+
+// Get atlas name (for debugging)
+string name = fontAtlas.Name;
+
+// Check if global scaling is applied
+bool isScaled = fontAtlas.IsGlobalScaled;
+```
+
+## Loading Custom Fonts
+
+### Font from File
+
+Load a font from the filesystem:
+
+```csharp
+private IFontHandle customFontHandle;
+
+public void Initialize()
+{
+    var fontAtlas = pluginInterface.UiBuilder.FontAtlas;
+    
+    this.customFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+    {
+        tk.AddFontFromFile(
+            @"C:\Windows\Fonts\arial.ttf",
+            new SafeFontConfig
+            {
+                SizePx = 24.0f,
+                GlyphRanges = tk.GetGlyphRangeDefaultEx()
+            });
+    }));
+}
+
+public void DrawUI()
+{
+    using (this.customFontHandle.Push())
+    {
+        ImGui.Text("Text in custom font");
+    }
+}
+```
+
+### Font from Memory
+
+Load a font from embedded resources or byte arrays:
+
+```csharp
+this.customFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    var fontBytes = GetFontBytes(); // Your method to get font data
+    tk.AddFontFromMemory(
+        fontBytes,
+        new SafeFontConfig { SizePx = 20.0f },
+        "MyEmbeddedFont");
+}));
+```
+
+### Font from Stream
+
+```csharp
+this.customFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    using var stream = File.OpenRead("path/to/font.ttf");
+    tk.AddFontFromStream(
+        stream,
+        new SafeFontConfig { SizePx = 18.0f },
+        leaveOpen: false,
+        "StreamFont");
+}));
+```
+
+## Font Configuration
+
+The `SafeFontConfig` struct controls how fonts are loaded:
+
+### Size Specification
+
+```csharp
+new SafeFontConfig
+{
+    SizePx = 24.0f,  // Size in pixels
+    // OR
+    SizePt = 18.0f   // Size in points (1pt = 4/3px)
+}
+```
+
+### Glyph Ranges
+
+Control which characters are loaded:
+
+```csharp
+new SafeFontConfig
+{
+    SizePx = 20.0f,
+    GlyphRanges = new ushort[]
+    {
+        0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0x2000, 0x206F, // General Punctuation
+        0,              // Null terminator
+    }
+}
+```
+
+### Merging Fonts
+
+Merge multiple fonts into one:
+
+```csharp
+this.mergedFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    // Add base font
+    var baseFont = tk.AddFontFromFile(
+        "base.ttf",
+        new SafeFontConfig { SizePx = 20.0f });
+    
+    // Merge icons into the base font
+    tk.AddFontFromFile(
+        "icons.ttf",
+        new SafeFontConfig
+        {
+            SizePx = 20.0f,
+            MergeFont = baseFont,  // Merge into base font
+            GlyphRanges = iconRanges
+        });
+    
+    // Set the final font
+    tk.Font = baseFont;
+}));
+```
+
+### Additional Options
+
+```csharp
+new SafeFontConfig
+{
+    SizePx = 20.0f,
+    
+    // Offset glyph positions
+    GlyphOffset = new Vector2(0, 2),
+    
+    // Minimum advance X (for monospace)
+    GlyphMinAdvanceX = 20.0f,
+    
+    // Extra spacing
+    PixelSnapH = true,
+    
+    // Rasterizer settings
+    OversampleH = 1,
+    OversampleV = 1,
+    
+    // Rasterizer flags
+    RasterizerMultiply = 1.0f
+}
+```
+
+## Dalamud Built-in Fonts
+
+### Adding Dalamud Default Font
+
+The default Dalamud font includes game language support and icons:
+
+```csharp
+this.dalamudFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    tk.AddDalamudDefaultFont(UiBuilder.DefaultFontSizePx);
+}));
+```
+
+### Adding FontAwesome Icons
+
+```csharp
+this.iconFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    tk.AddFontAwesomeIconFont(new SafeFontConfig
+    {
+        SizePx = UiBuilder.DefaultFontSizePx
+    });
+}));
+```
+
+### Adding Dalamud Asset Fonts
+
+```csharp
+this.monoFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    tk.AddDalamudAssetFont(
+        DalamudAsset.InconsolataRegular,
+        new SafeFontConfig { SizePx = 20.0f });
+}));
+```
+
+Available assets:
+- `DalamudAsset.InconsolataRegular` - Monospace font
+- `DalamudAsset.FontAwesomeFreeSolid` - FontAwesome icons
+
+### Adding Game Symbols
+
+Add game's built-in icon symbols:
+
+```csharp
+this.symbolFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    var baseFont = tk.AddDalamudDefaultFont(20.0f);
+    
+    tk.AddGameSymbol(new SafeFontConfig
+    {
+        SizePx = 20.0f,
+        MergeFont = baseFont
+    });
+    
+    tk.Font = baseFont;
+}));
+```
+
+## Game Fonts
+
+Use fonts from the game's resources:
+
+```csharp
+using Dalamud.Interface.GameFonts;
+
+this.gameFontHandle = fontAtlas.NewGameFontHandle(new GameFontStyle
+{
+    FamilyAndSize = GameFontFamilyAndSize.Axis12,
+    SizePx = 20.0f
+});
+```
+
+### Available Game Font Families
+
+- `GameFontFamily.Axis` - Standard UI font (sizes: 96, 12, 14, 18, 36)
+- `GameFontFamily.Jupiter` - Decorative font (sizes: 16, 20, 23, 46)
+- `GameFontFamily.JupiterNumeric` - Numeric font (sizes: 45, 90)
+- `GameFontFamily.Meidinger` - Sans-serif font (sizes: 16, 20, 40)
+- `GameFontFamily.MiedingerMid` - Mid-weight font (sizes: 10, 12, 14, 18, 36)
+- `GameFontFamily.TrumpGothic` - Gothic font (sizes: 184, 23, 34, 68)
+
+### Font Styling
+
+```csharp
+var gameFont = new GameFontStyle(GameFontFamily.Axis, 20.0f)
+{
+    Bold = true,
+    Italic = true,
+    Weight = 1.0f,      // Boldness amount
+    SkewStrength = 0.2f // Italics amount
+};
+
+this.styledFontHandle = fontAtlas.NewGameFontHandle(gameFont);
+```
+
+## Supporting Multiple Languages
+
+Add glyphs for languages not included by default:
+
+```csharp
+this.multiLangFontHandle = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    var baseFont = tk.AddFontFromFile(
+        "myfont.ttf",
+        new SafeFontConfig { SizePx = 20.0f });
+    
+    // Add extra glyphs for Dalamud's configured language
+    tk.AttachExtraGlyphsForDalamudLanguage(new SafeFontConfig
+    {
+        SizePx = 20.0f,
+        MergeFont = baseFont
+    });
+    
+    tk.Font = baseFont;
+}));
+```
+
+### Specific Language Support
+
+```csharp
+using System.Globalization;
+
+tk.AttachWindowsDefaultFont(
+    new CultureInfo("ja-JP"),  // Japanese
+    new SafeFontConfig
+    {
+        SizePx = 20.0f,
+        MergeFont = baseFont
+    });
+```
+
+## Font Rebuilding
+
+The font atlas can be rebuilt when needed:
+
+### Automatic Rebuilding
+
+```csharp
+// Atlas automatically rebuilds when needed
+var autoRebuildMode = fontAtlas.AutoRebuildMode;
+```
+
+Modes:
+- `FontAtlasAutoRebuildMode.Async` - Rebuild asynchronously (recommended)
+- `FontAtlasAutoRebuildMode.OnNewFrame` - Rebuild synchronously on main thread
+- `FontAtlasAutoRebuildMode.Disable` - Manual rebuilding only
+
+### Manual Rebuilding
+
+```csharp
+// Asynchronous rebuild (recommended)
+await fontAtlas.BuildFontsAsync();
+
+// Synchronous rebuild (blocks main thread)
+fontAtlas.BuildFontsImmediately();
+
+// Queue rebuild on next frame
+fontAtlas.BuildFontsOnNextFrame();
+```
+
+### Rebuild Events
+
+```csharp
+fontAtlas.RebuildRecommend += () =>
+{
+    // Font atlas recommends rebuilding
+    // (e.g., due to scale change)
+};
+
+fontAtlas.BuildStepChange += (step) =>
+{
+    // Build step changed (for progress tracking)
+};
+```
+
+### Suppressing Auto-Rebuild
+
+When adding multiple fonts, suppress rebuilding until done:
+
+```csharp
+using (fontAtlas.SuppressAutoRebuild())
+{
+    this.font1 = fontAtlas.NewGameFontHandle(style1);
+    this.font2 = fontAtlas.NewGameFontHandle(style2);
+    this.font3 = fontAtlas.NewGameFontHandle(style3);
+}
+// Rebuild happens once after the using block
+```
+
+## Font Handles
+
+### Using Font Handles
+
+Font handles provide safe access to fonts:
+
+```csharp
+private IFontHandle myFontHandle;
+
+public void DrawUI()
+{
+    // Method 1: Using statement (recommended)
+    using (this.myFontHandle.Push())
+    {
+        ImGui.Text("Text in custom font");
+    }
+    
+    // Method 2: Manual push/pop
+    this.myFontHandle.Push();
+    ImGui.Text("More text");
+    this.myFontHandle.Pop();
+}
+```
+
+### Waiting for Fonts
+
+Fonts may not be immediately available:
+
+```csharp
+// Wait for font to be ready
+await this.myFontHandle.WaitAsync();
+
+// Check if font is ready
+if (this.myFontHandle.Available)
+{
+    using (this.myFontHandle.Push())
+    {
+        ImGui.Text("Font is ready!");
+    }
+}
+
+// Check for load errors
+if (this.myFontHandle.LoadException != null)
+{
+    // Handle font load error
+    var error = this.myFontHandle.LoadException;
+}
+```
+
+### Conditional Font Usage
+
+```csharp
+if (this.myFontHandle.TryLock(out var errorMessage) is { } lockedFont)
+{
+    using (lockedFont)
+    {
+        var font = lockedFont.ImFont;
+        // Use font
+    }
+}
+else
+{
+    // Font not available, errorMessage contains reason
+}
+```
+
+### Font Change Events
+
+```csharp
+this.myFontHandle.ImFontChanged += (handle, lockedFont) =>
+{
+    // Font has been rebuilt
+    // Update any cached font metrics
+};
+```
+
+## Creating Isolated Font Atlases
+
+For advanced scenarios, create separate font atlases:
+
+```csharp
+var customAtlas = pluginInterface.UiBuilder.CreateFontAtlas(
+    FontAtlasAutoRebuildMode.Async,
+    isGlobalScaled: true,
+    debugName: "CustomAtlas");
+
+var fontHandle = customAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+{
+    tk.AddFontFromFile("special.ttf", new SafeFontConfig { SizePx = 30.0f });
+}));
+
+// Don't forget to dispose when done
+customAtlas.Dispose();
+```
+
+<Warning>
+  Custom font atlases must be manually disposed. The plugin's default atlas is automatically disposed on plugin unload.
+</Warning>
+
+## Best Practices
+
+<Steps>
+
+### Load Fonts Once
+
+Load fonts during plugin initialization, not every frame.
+
+### Use Font Handles
+
+Prefer `IFontHandle` over raw `ImFontPtr` for safety and automatic management.
+
+### Dispose Properly
+
+Always dispose custom font handles and atlases when your plugin unloads.
+
+### Check Availability
+
+Check `Available` or use `WaitAsync()` before using fonts that may not be ready.
+
+### Support Multiple Languages
+
+Use `AttachExtraGlyphsForDalamudLanguage` to support international users.
+
+### Use Appropriate Sizes
+
+Respect `UiBuilder.DefaultFontSizePx` and scale your fonts accordingly.
+
+</Steps>
+
+## Complete Example
+
+```csharp
+using Dalamud.Interface.ManagedFontAtlas;
+
+public class FontExample : IDisposable
+{
+    private IFontHandle regularFont;
+    private IFontHandle largeFont;
+    private IFontHandle gameFont;
+    
+    public FontExample(DalamudPluginInterface pluginInterface)
+    {
+        var fontAtlas = pluginInterface.UiBuilder.FontAtlas;
+        
+        // Suppress rebuilding while loading multiple fonts
+        using (fontAtlas.SuppressAutoRebuild())
+        {
+            // Regular custom font with icon support
+            this.regularFont = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+            {
+                var font = tk.AddFontFromFile(
+                    @"C:\Windows\Fonts\segoeui.ttf",
+                    new SafeFontConfig { SizePx = UiBuilder.DefaultFontSizePx });
+                
+                // Add FontAwesome icons
+                tk.AddFontAwesomeIconFont(new SafeFontConfig
+                {
+                    SizePx = UiBuilder.DefaultFontSizePx,
+                    MergeFont = font
+                });
+                
+                // Add extra language support
+                tk.AttachExtraGlyphsForDalamudLanguage(new SafeFontConfig
+                {
+                    SizePx = UiBuilder.DefaultFontSizePx,
+                    MergeFont = font
+                });
+                
+                tk.Font = font;
+            }));
+            
+            // Large display font
+            this.largeFont = fontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
+            {
+                tk.AddDalamudDefaultFont(36.0f);
+            }));
+            
+            // Game font
+            this.gameFont = fontAtlas.NewGameFontHandle(new GameFontStyle
+            {
+                FamilyAndSize = GameFontFamilyAndSize.Axis14,
+                SizePx = 20.0f
+            });
+        }
+    }
+    
+    public void DrawUI()
+    {
+        ImGui.Begin("Font Demo");
+        
+        using (this.regularFont.Push())
+        {
+            ImGui.Text("Regular custom font with icons: ");
+            ImGui.SameLine();
+            ImGui.Text(FontAwesomeIcon.Heart.ToIconString());
+        }
+        
+        using (this.largeFont.Push())
+        {
+            ImGui.Text("Large Display Text");
+        }
+        
+        using (this.gameFont.Push())
+        {
+            ImGui.Text("Game Font (Axis)");
+        }
+        
+        ImGui.End();
+    }
+    
+    public void Dispose()
+    {
+        this.regularFont?.Dispose();
+        this.largeFont?.Dispose();
+        this.gameFont?.Dispose();
+    }
+}
+```
+
+## See Also
+
+- [UiBuilder](/ui/ui-builder) - Core UI interface
+- [ImGui Basics](/ui/imgui-basics) - Basic ImGui usage
+- [Textures](/ui/textures) - Loading images

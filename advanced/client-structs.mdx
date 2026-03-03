@@ -1,0 +1,595 @@
+---
+title: 'Client Structs Integration'
+description: 'Using FFXIVClientStructs for type-safe game memory access'
+icon: 'cube'
+---
+
+## Overview
+
+FFXIVClientStructs is a companion library that provides C# definitions for FFXIV's internal structures, functions, and UI elements. It enables type-safe, structured access to game memory instead of working with raw pointers and offsets.
+
+<Note>
+FFXIVClientStructs is automatically included with Dalamud and doesn't require separate installation.
+</Note>
+
+## What is FFXIVClientStructs?
+
+FFXIVClientStructs is a reverse-engineered mapping of FFXIV's internal C++ classes and structures to C#. It provides:
+
+- **Struct definitions**: C# representations of game structures
+- **Function signatures**: Native function declarations
+- **Type safety**: Compile-time checking instead of raw memory access
+- **Documentation**: Field names and structure documentation
+
+## Basic Usage
+
+### Accessing Game Singletons
+
+Many game systems are accessible via singleton instances:
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.System.Framework;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI;
+
+public unsafe void AccessGameData()
+{
+    // Get the main framework instance
+    var framework = Framework.Instance();
+    if (framework == null)
+    {
+        PluginLog.Error("Framework not available");
+        return;
+    }
+    
+    // Access game managers
+    var inventoryManager = InventoryManager.Instance();
+    if (inventoryManager != null)
+    {
+        var itemCount = inventoryManager->GetInventoryItemCount(1);
+        PluginLog.Info($"Items in inventory: {itemCount}");
+    }
+    
+    // Access UI manager
+    var uiModule = UIModule.Instance();
+    if (uiModule != null)
+    {
+        PluginLog.Info("UI Module available");
+    }
+}
+```
+
+### Working with Structures
+
+Access structure fields directly:
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
+
+public unsafe void ReadGameObject(GameObject* obj)
+{
+    if (obj == null) return;
+    
+    // Access fields
+    var objectId = obj->ObjectID;
+    var position = obj->Position;
+    var rotation = obj->Rotation;
+    
+    PluginLog.Info($"Object ID: {objectId:X}");
+    PluginLog.Info($"Position: ({position.X}, {position.Y}, {position.Z})");
+    PluginLog.Info($"Rotation: {rotation}");
+    
+    // Check object kind
+    var kind = obj->ObjectKind;
+    if (kind == ObjectKind.Player)
+    {
+        // Cast to more specific type
+        var character = (Character*)obj;
+        var level = character->CharacterData.Level;
+        PluginLog.Info($"Player level: {level}");
+    }
+}
+```
+
+### Calling Game Functions
+
+ClientStructs provides function signatures you can call:
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.Game;
+
+public unsafe void UseAction()
+{
+    var actionManager = ActionManager.Instance();
+    if (actionManager == null) return;
+    
+    // Use an action
+    uint actionId = 3; // Sprint
+    var result = actionManager->UseAction(
+        ActionType.Action,
+        actionId,
+        targetId: 0xE0000000 // Self
+    );
+    
+    if (result)
+    {
+        PluginLog.Info("Action used successfully");
+    }
+}
+```
+
+## Common Structures
+
+### Framework
+
+The main game framework:
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.System.Framework;
+
+public unsafe void UseFramework()
+{
+    var fw = Framework.Instance();
+    if (fw == null) return;
+    
+    // Get current server time
+    var serverTime = fw->ServerTime;
+    PluginLog.Info($"Server time: {serverTime}");
+    
+    // Check if in cutscene
+    // var inCutscene = fw->InCutscene;
+}
+```
+
+### GameObject and Character
+
+Game objects and characters:
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
+
+public unsafe void InspectCharacter(GameObject* obj)
+{
+    if (obj == null || obj->ObjectKind != ObjectKind.Player)
+        return;
+    
+    var character = (Character*)obj;
+    
+    // Character data
+    var data = character->CharacterData;
+    PluginLog.Info($"Name: {obj->GetName()}");
+    PluginLog.Info($"Level: {data.Level}");
+    PluginLog.Info($"ClassJob: {data.ClassJob}");
+    
+    // Status
+    var hp = character->CharacterData.Health;
+    var maxHp = character->CharacterData.MaxHealth;
+    var mp = character->CharacterData.Mana;
+    
+    PluginLog.Info($"HP: {hp}/{maxHp}");
+    PluginLog.Info($"MP: {mp}");
+    
+    // Mount info
+    var mountId = character->Mount.MountId;
+    if (mountId != 0)
+    {
+        PluginLog.Info($"Mounted on: {mountId}");
+    }
+}
+```
+
+### UI Components
+
+Accessing UI addons (windows):
+
+```csharp
+using FFXIVClientStructs.FFXIV.Component.GUI;
+using FFXIVClientStructs.FFXIV.Client.UI;
+
+public unsafe void AccessUI()
+{
+    var uiModule = UIModule.Instance();
+    if (uiModule == null) return;
+    
+    // Get a specific addon
+    var nameplate = uiModule->GetRaptureAtkModule()->GetAddonByName("NamePlate");
+    if (nameplate != null)
+    {
+        PluginLog.Info($"NamePlate visible: {nameplate->IsVisible}");
+    }
+    
+    // Access addon as specific type
+    var inventory = (AtkUnitBase*)uiModule->GetRaptureAtkModule()
+        ->GetAddonByName("Inventory");
+    
+    if (inventory != null && inventory->IsVisible)
+    {
+        PluginLog.Info("Inventory is open");
+        
+        // Access UI nodes
+        var rootNode = inventory->RootNode;
+        if (rootNode != null)
+        {
+            PluginLog.Info($"Root node type: {rootNode->Type}");
+        }
+    }
+}
+```
+
+### Inventory
+
+Accessing inventory data:
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.Game;
+
+public unsafe void CheckInventory()
+{
+    var inventoryManager = InventoryManager.Instance();
+    if (inventoryManager == null) return;
+    
+    // Get inventory container
+    var inventory = inventoryManager->GetInventoryContainer(
+        InventoryType.Inventory1
+    );
+    
+    if (inventory == null) return;
+    
+    // Iterate items
+    for (int i = 0; i < inventory->Size; i++)
+    {
+        var item = inventory->GetInventorySlot(i);
+        if (item == null || item->ItemID == 0)
+            continue;
+        
+        PluginLog.Info($"Slot {i}: Item {item->ItemID}, Qty: {item->Quantity}");
+        PluginLog.Info($"  HQ: {item->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality)}");
+    }
+}
+```
+
+## Utility Extensions
+
+Dalamud provides extension methods for common ClientStruct types:
+
+### Utf8String Extensions
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using Dalamud.Utility;
+
+public unsafe void HandleUtf8String(Utf8String* str)
+{
+    if (str == null) return;
+    
+    // Convert to C# string
+    var text = str->ToString();
+    PluginLog.Info($"Text: {text}");
+    
+    // Check if empty
+    if (str->IsEmpty)
+    {
+        PluginLog.Info("String is empty");
+    }
+}
+```
+
+<Warning>
+Utf8String extensions assume standard ClientStructs. If you use custom ClientStructs builds, these extensions may break.
+</Warning>
+
+### Vector Extensions
+
+```csharp
+using FFXIVClientStructs.FFXIV.Client.Graphics;
+using Dalamud.Utility.Numerics;
+using System.Numerics;
+
+public void ConvertVectors()
+{
+    // FFXIVClientStructs Vector3 to System.Numerics.Vector3
+    var csVector = new FFXIVClientStructs.FFXIV.Common.Math.Vector3
+    {
+        X = 100f,
+        Y = 50f,
+        Z = 200f
+    };
+    
+    // Convert using extensions
+    var systemVector = new Vector3(csVector.X, csVector.Y, csVector.Z);
+    
+    // Calculate distance
+    var distance = systemVector.Length();
+    PluginLog.Info($"Distance from origin: {distance}");
+}
+```
+
+## Working with Pointers
+
+### Null Checking
+
+Always check for null pointers:
+
+```csharp
+public unsafe void SafeAccess()
+{
+    var manager = InventoryManager.Instance();
+    if (manager == null)
+    {
+        PluginLog.Warning("Manager not available");
+        return;
+    }
+    
+    var container = manager->GetInventoryContainer(InventoryType.Inventory1);
+    if (container == null)
+    {
+        PluginLog.Warning("Container not available");
+        return;
+    }
+    
+    // Safe to use now
+    var size = container->Size;
+}
+```
+
+### Pointer Arithmetic
+
+```csharp
+public unsafe void IterateArray(AtkComponentNode** nodes, int count)
+{
+    if (nodes == null) return;
+    
+    for (int i = 0; i < count; i++)
+    {
+        var node = nodes[i];
+        if (node == null) continue;
+        
+        // Access node data
+        var component = node->Component;
+        if (component != null)
+        {
+            // Process component
+        }
+    }
+}
+```
+
+### Casting Pointers
+
+```csharp
+using FFXIVClientStructs.FFXIV.Component.GUI;
+
+public unsafe void CastNodes(AtkResNode* node)
+{
+    if (node == null) return;
+    
+    switch (node->Type)
+    {
+        case NodeType.Image:
+            var imageNode = (AtkImageNode*)node;
+            PluginLog.Info($"Image: {imageNode->PartId}");
+            break;
+        
+        case NodeType.Text:
+            var textNode = (AtkTextNode*)node;
+            var text = textNode->NodeText.ToString();
+            PluginLog.Info($"Text: {text}");
+            break;
+        
+        case NodeType.Component:
+            var componentNode = (AtkComponentNode*)node;
+            var component = componentNode->Component;
+            PluginLog.Info($"Component: {component->UldManager.NodeListCount} nodes");
+            break;
+    }
+}
+```
+
+## Memory Safety
+
+### Fixed Buffers
+
+Some structures use fixed buffers:
+
+```csharp
+public unsafe void ReadFixedBuffer()
+{
+    // Example structure with fixed buffer
+    // fixed byte Name[64];
+    
+    var obj = GetSomeObject();
+    if (obj == null) return;
+    
+    // Access fixed buffer
+    var nameSpan = new ReadOnlySpan<byte>(obj->Name, 64);
+    
+    // Find null terminator
+    var nullIndex = nameSpan.IndexOf((byte)0);
+    if (nullIndex >= 0)
+    {
+        nameSpan = nameSpan[..nullIndex];
+    }
+    
+    // Convert to string
+    var name = System.Text.Encoding.UTF8.GetString(nameSpan);
+    PluginLog.Info($"Name: {name}");
+}
+```
+
+### Structure Validation
+
+```csharp
+public unsafe bool IsValidStructure<T>(T* ptr) where T : unmanaged
+{
+    if (ptr == null)
+        return false;
+    
+    // Check if pointer is in valid memory range
+    var address = (nint)ptr;
+    
+    // Basic sanity checks
+    if (address < 0x10000) // Null-ish
+        return false;
+    
+    if (address > 0x7FFFFFFFFFFF) // Out of user space
+        return false;
+    
+    return true;
+}
+```
+
+## ClientStructs Version
+
+You can check the ClientStructs version:
+
+```csharp
+using FFXIVClientStructs;
+
+public void CheckVersion()
+{
+    var version = ThisAssembly.Git.Commits;
+    PluginLog.Info($"ClientStructs commits: {version}");
+    
+    // From Dalamud's version info
+    var gitHash = Dalamud.Utility.Versioning.GetGitHashClientStructs();
+    PluginLog.Info($"ClientStructs hash: {gitHash}");
+}
+```
+
+## Best Practices
+
+### Always Use Unsafe Context
+
+ClientStructs requires unsafe code:
+
+```csharp
+// In .csproj
+<PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+</PropertyGroup>
+```
+
+### Check for Null
+
+Always validate pointers before use:
+
+```csharp
+public unsafe void AlwaysCheckNull()
+{
+    var instance = SomeManager.Instance();
+    if (instance == null)
+    {
+        // Handle gracefully
+        return;
+    }
+    
+    // Safe to use
+}
+```
+
+### Avoid Storing Pointers
+
+Don't store pointers long-term - they can become invalid:
+
+```csharp
+// Bad: Storing pointer
+private unsafe GameObject* storedObject;
+
+// Good: Store object ID and re-fetch
+private uint storedObjectId;
+
+public unsafe GameObject* GetObject()
+{
+    // Re-fetch each time
+    var objectTable = ObjectTable.Instance();
+    return objectTable->GetObjectById(this.storedObjectId);
+}
+```
+
+### Use with Game Services
+
+Combine ClientStructs with Dalamud services:
+
+```csharp
+using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
+
+public class CombinedExample
+{
+    private readonly IObjectTable objectTable;
+    
+    public CombinedExample(IObjectTable objectTable)
+    {
+        this.objectTable = objectTable;
+    }
+    
+    public unsafe void UseServices()
+    {
+        // Use Dalamud service for high-level access
+        var player = this.objectTable.FirstOrDefault(o => o.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player);
+        
+        if (player != null)
+        {
+            // Get ClientStruct pointer for low-level access
+            var playerPtr = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
+            
+            if (playerPtr != null)
+            {
+                // Access fields not exposed by Dalamud
+                var internalData = playerPtr->CharacterData;
+            }
+        }
+    }
+}
+```
+
+## Common Patterns
+
+### Singleton Access Pattern
+
+```csharp
+public unsafe class GameDataAccessor
+{
+    public void RefreshData()
+    {
+        var framework = Framework.Instance();
+        if (framework == null) return;
+        
+        var inventory = InventoryManager.Instance();
+        if (inventory == null) return;
+        
+        var ui = UIModule.Instance();
+        if (ui == null) return;
+        
+        // Use instances
+    }
+}
+```
+
+### UI Addon Pattern
+
+```csharp
+public unsafe bool TryGetAddon<T>(string name, out T* addon) where T : unmanaged
+{
+    addon = null;
+    
+    var uiModule = UIModule.Instance();
+    if (uiModule == null) return false;
+    
+    var atkModule = uiModule->GetRaptureAtkModule();
+    if (atkModule == null) return false;
+    
+    var baseAddon = atkModule->GetAddonByName(name);
+    if (baseAddon == null) return false;
+    
+    addon = (T*)baseAddon;
+    return true;
+}
+```
+
+## Related Topics
+
+- [Memory Operations](/advanced/memory) - Reading and writing memory
+- [Function Hooking](/advanced/hooking) - Hooking ClientStruct functions
+- [Game Interop Provider](/advanced/game-interop) - Using ClientStructs with signatures

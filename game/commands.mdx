@@ -1,0 +1,451 @@
+---
+title: Command Manager
+description: Register and manage in-game slash commands
+---
+
+The `ICommandManager` service allows you to register custom slash commands that players can use in the game's chat input.
+
+## Getting Started
+
+Inject the service into your plugin:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using Dalamud.Game.Command;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly ICommandManager commandManager;
+    private const string CommandName = "/myplugin";
+
+    public MyPlugin(ICommandManager commandManager)
+    {
+        this.commandManager = commandManager;
+        
+        // Register command
+        this.commandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Opens the MyPlugin interface",
+            ShowInHelp = true
+        });
+    }
+
+    private void OnCommand(string command, string args)
+    {
+        // Handle command
+    }
+
+    public void Dispose()
+    {
+        this.commandManager.RemoveHandler(CommandName);
+    }
+}
+```
+
+## Methods
+
+### AddHandler
+
+Add a command handler, which you can use to add your own custom commands to the in-game chat.
+
+```csharp
+bool AddHandler(string command, CommandInfo info)
+```
+
+<ParamField path="command" type="string" required>
+  The command to register (e.g., "/mycommand")
+</ParamField>
+
+<ParamField path="info" type="CommandInfo" required>
+  A CommandInfo object describing the command
+</ParamField>
+
+**Returns:** `true` if adding was successful.
+
+**Example:**
+
+```csharp
+var commandInfo = new CommandInfo(OnCommand)
+{
+    HelpMessage = "Opens the plugin configuration",
+    ShowInHelp = true
+};
+
+if (commandManager.AddHandler("/myconfig", commandInfo))
+{
+    Logger.Info("Command registered successfully");
+}
+```
+
+### RemoveHandler
+
+Remove a command from the command handlers.
+
+```csharp
+bool RemoveHandler(string command)
+```
+
+<ParamField path="command" type="string" required>
+  The command to remove
+</ParamField>
+
+**Returns:** `true` if the removal was successful.
+
+**Example:**
+
+```csharp
+commandManager.RemoveHandler("/mycommand");
+```
+
+### ProcessCommand
+
+Process a command in full.
+
+```csharp
+bool ProcessCommand(string content)
+```
+
+<ParamField path="content" type="string" required>
+  The full command string
+</ParamField>
+
+**Returns:** `true` if the command was found and dispatched.
+
+**Example:**
+
+```csharp
+// Programmatically execute a command
+if (commandManager.ProcessCommand("/mycommand arg1 arg2"))
+{
+    Logger.Info("Command executed");
+}
+```
+
+### DispatchCommand
+
+Dispatch the handling of a command.
+
+```csharp
+void DispatchCommand(string command, string argument, IReadOnlyCommandInfo info)
+```
+
+<ParamField path="command" type="string" required>
+  The command to dispatch
+</ParamField>
+
+<ParamField path="argument" type="string" required>
+  The provided arguments
+</ParamField>
+
+<ParamField path="info" type="IReadOnlyCommandInfo" required>
+  A CommandInfo object describing this command
+</ParamField>
+
+## Properties
+
+### Commands
+
+Gets a read-only list of all registered commands.
+
+```csharp
+ReadOnlyDictionary<string, IReadOnlyCommandInfo> Commands { get; }
+```
+
+**Example:**
+
+```csharp
+foreach (var (command, info) in commandManager.Commands)
+{
+    Logger.Info($"Command: {command}, Help: {info.HelpMessage}");
+}
+```
+
+## CommandInfo
+
+Describes a registered command.
+
+### Constructor
+
+```csharp
+CommandInfo(IReadOnlyCommandInfo.HandlerDelegate handler)
+```
+
+<ParamField path="handler" type="HandlerDelegate" required>
+  The method to call when the command is run
+</ParamField>
+
+### Properties
+
+#### Handler
+
+The delegate that will be called when the command is dispatched.
+
+```csharp
+HandlerDelegate Handler { get; }
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void HandlerDelegate(string command, string arguments)
+```
+
+<ParamField path="command" type="string">
+  The command itself
+</ParamField>
+
+<ParamField path="arguments" type="string">
+  The arguments supplied to the command, ready for parsing
+</ParamField>
+
+#### HelpMessage
+
+The help message for this command.
+
+```csharp
+string HelpMessage { get; set; }
+```
+
+#### ShowInHelp
+
+Whether this command should be shown in the help output.
+
+```csharp
+bool ShowInHelp { get; set; }
+```
+
+**Default:** `true`
+
+#### DisplayOrder
+
+The display order of this command. Defaults to alphabetical ordering.
+
+```csharp
+int DisplayOrder { get; set; }
+```
+
+**Default:** `-1` (alphabetical)
+
+## Common Use Cases
+
+### Basic Command
+
+```csharp
+private void RegisterCommands()
+{
+    commandManager.AddHandler("/myplugin", new CommandInfo(OnPluginCommand)
+    {
+        HelpMessage = "Toggle the main plugin window"
+    });
+}
+
+private void OnPluginCommand(string command, string args)
+{
+    mainWindow.IsOpen = !mainWindow.IsOpen;
+}
+```
+
+### Command with Arguments
+
+```csharp
+private void OnCommand(string command, string args)
+{
+    var arguments = args.Split(' ');
+    
+    if (arguments.Length == 0 || arguments[0] == "")
+    {
+        mainWindow.IsOpen = true;
+        return;
+    }
+    
+    switch (arguments[0].ToLower())
+    {
+        case "help":
+            ShowHelp();
+            break;
+        case "config":
+            configWindow.IsOpen = true;
+            break;
+        case "enable":
+            config.Enabled = true;
+            chatGui.Print("Plugin enabled");
+            break;
+        case "disable":
+            config.Enabled = false;
+            chatGui.Print("Plugin disabled");
+            break;
+        default:
+            chatGui.PrintError($"Unknown subcommand: {arguments[0]}");
+            break;
+    }
+}
+```
+
+### Multiple Commands
+
+```csharp
+private readonly Dictionary<string, CommandInfo> commands = new();
+
+private void RegisterCommands()
+{
+    commands["/mp"] = new CommandInfo(OnMainCommand)
+    {
+        HelpMessage = "Main plugin command (short)"
+    };
+    
+    commands["/myplugin"] = new CommandInfo(OnMainCommand)
+    {
+        HelpMessage = "Main plugin command"
+    };
+    
+    commands["/mpconfig"] = new CommandInfo(OnConfigCommand)
+    {
+        HelpMessage = "Open plugin configuration"
+    };
+    
+    foreach (var (command, info) in commands)
+    {
+        commandManager.AddHandler(command, info);
+    }
+}
+
+public void Dispose()
+{
+    foreach (var command in commands.Keys)
+    {
+        commandManager.RemoveHandler(command);
+    }
+}
+```
+
+### Command with Help System
+
+```csharp
+private void OnCommand(string command, string args)
+{
+    var parts = args.Trim().Split(' ', 2);
+    var subcommand = parts.Length > 0 ? parts[0].ToLower() : "";
+    var subargs = parts.Length > 1 ? parts[1] : "";
+    
+    switch (subcommand)
+    {
+        case "":
+        case "toggle":
+            mainWindow.IsOpen = !mainWindow.IsOpen;
+            break;
+            
+        case "help":
+            ShowHelp();
+            break;
+            
+        case "set":
+            HandleSetCommand(subargs);
+            break;
+            
+        default:
+            chatGui.PrintError($"Unknown command: {subcommand}");
+            chatGui.Print("Type '/myplugin help' for usage");
+            break;
+    }
+}
+
+private void ShowHelp()
+{
+    chatGui.Print("Available commands:", "MyPlugin", 575);
+    chatGui.Print("  /myplugin - Toggle main window");
+    chatGui.Print("  /myplugin help - Show this help");
+    chatGui.Print("  /myplugin set <option> <value> - Change settings");
+}
+```
+
+### Advanced Argument Parsing
+
+```csharp
+private void OnCommand(string command, string args)
+{
+    var tokens = ParseArguments(args);
+    
+    if (tokens.Count == 0)
+    {
+        mainWindow.Toggle();
+        return;
+    }
+    
+    var action = tokens[0].ToLower();
+    switch (action)
+    {
+        case "search" when tokens.Count > 1:
+            var query = string.Join(" ", tokens.Skip(1));
+            PerformSearch(query);
+            break;
+            
+        case "filter" when tokens.Count == 3:
+            ApplyFilter(tokens[1], tokens[2]);
+            break;
+            
+        default:
+            chatGui.PrintError("Invalid command syntax");
+            break;
+    }
+}
+
+private List<string> ParseArguments(string args)
+{
+    var tokens = new List<string>();
+    var currentToken = new StringBuilder();
+    var inQuotes = false;
+    
+    foreach (var c in args)
+    {
+        if (c == '"')
+        {
+            inQuotes = !inQuotes;
+        }
+        else if (c == ' ' && !inQuotes)
+        {
+            if (currentToken.Length > 0)
+            {
+                tokens.Add(currentToken.ToString());
+                currentToken.Clear();
+            }
+        }
+        else
+        {
+            currentToken.Append(c);
+        }
+    }
+    
+    if (currentToken.Length > 0)
+    {
+        tokens.Add(currentToken.ToString());
+    }
+    
+    return tokens;
+}
+```
+
+### Command Aliases
+
+```csharp
+private void RegisterCommands()
+{
+    var handler = new CommandInfo(OnCommand)
+    {
+        HelpMessage = "Control MyPlugin"
+    };
+    
+    // Register multiple aliases for the same handler
+    commandManager.AddHandler("/myplugin", handler);
+    commandManager.AddHandler("/mp", handler);
+    commandManager.AddHandler("/myp", handler);
+}
+```
+
+<Note>
+  Command names are case-insensitive. "/MyCommand" and "/mycommand" are treated as the same command.
+</Note>
+
+<Warning>
+  Always remove your commands in the plugin's `Dispose` method to prevent conflicts and memory leaks.
+</Warning>

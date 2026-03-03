@@ -1,0 +1,476 @@
+---
+title: "Creating a Plugin"
+description: "Step-by-step guide to building your first Dalamud plugin"
+---
+
+## Project Setup
+
+Let's create a complete plugin from scratch that displays a simple window and registers a command.
+
+<Steps>
+<Step title="Create a New Project">
+
+Create a new .NET class library:
+
+```bash
+dotnet new classlib -n MyFirstPlugin -f net8.0
+cd MyFirstPlugin
+```
+
+Or use Visual Studio:
+1. File → New → Project
+2. Select "Class Library (.NET Core)"
+3. Choose .NET 8.0
+4. Name it "MyFirstPlugin"
+
+</Step>
+
+<Step title="Configure the Project File">
+
+Edit `MyFirstPlugin.csproj` to include Dalamud dependencies:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
+    <Nullable>enable</Nullable>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DalamudPackager" Version="2.1.13" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Dalamud">
+      <HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>$(DalamudLibPath)ImGui.NET.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina">
+      <HintPath>$(DalamudLibPath)Lumina.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina.Excel">
+      <HintPath>$(DalamudLibPath)Lumina.Excel.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
+```
+
+<Warning>
+  Set `<Private>false</Private>` for Dalamud references. This prevents bundling Dalamud DLLs with your plugin.
+</Warning>
+
+</Step>
+
+<Step title="Create the Plugin Manifest">
+
+Create `MyFirstPlugin.json` in your project root:
+
+```json
+{
+  "Author": "Your Name",
+  "Name": "My First Plugin",
+  "Punchline": "A simple example plugin",
+  "Description": "This plugin demonstrates basic Dalamud functionality.",
+  "InternalName": "MyFirstPlugin",
+  "RepoUrl": "https://github.com/yourusername/MyFirstPlugin",
+  "Tags": ["example", "ui"]
+}
+```
+
+The DalamudPackager will automatically generate the full manifest during build.
+
+</Step>
+</Steps>
+
+## Implementing the Plugin
+
+### Main Plugin Class
+
+Create `Plugin.cs` with the core plugin implementation:
+
+```csharp Plugin.cs
+using Dalamud.Game.Command;
+using Dalamud.IoC;
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+
+namespace MyFirstPlugin;
+
+public sealed class Plugin : IDalamudPlugin
+{
+    private const string CommandName = "/pmyfirst";
+
+    private readonly IDalamudPluginInterface pluginInterface;
+    private readonly ICommandManager commandManager;
+    private readonly IChatGui chatGui;
+    
+    private PluginUI ui;
+
+    public Plugin(
+        IDalamudPluginInterface pluginInterface,
+        ICommandManager commandManager,
+        IChatGui chatGui)
+    {
+        this.pluginInterface = pluginInterface;
+        this.commandManager = commandManager;
+        this.chatGui = chatGui;
+
+        // Create UI
+        this.ui = new PluginUI(this);
+        this.pluginInterface.UiBuilder.Draw += this.ui.Draw;
+        this.pluginInterface.UiBuilder.OpenConfigUi += () => this.ui.IsVisible = true;
+
+        // Register command
+        this.commandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Opens the My First Plugin window",
+            ShowInHelp = true
+        });
+
+        // Send welcome message
+        this.chatGui.Print("My First Plugin loaded! Use /pmyfirst to open.");
+    }
+
+    private void OnCommand(string command, string args)
+    {
+        this.ui.IsVisible = !this.ui.IsVisible;
+    }
+
+    public void Dispose()
+    {
+        // Unregister command
+        this.commandManager.RemoveHandler(CommandName);
+        
+        // Clean up UI
+        this.pluginInterface.UiBuilder.Draw -= this.ui.Draw;
+        this.ui.Dispose();
+    }
+}
+```
+
+### UI Implementation
+
+Create `PluginUI.cs` to handle the interface:
+
+```csharp PluginUI.cs
+using System;
+using System.Numerics;
+using ImGuiNET;
+
+namespace MyFirstPlugin;
+
+public class PluginUI : IDisposable
+{
+    private readonly Plugin plugin;
+    
+    public bool IsVisible { get; set; }
+    
+    private int clickCount = 0;
+
+    public PluginUI(Plugin plugin)
+    {
+        this.plugin = plugin;
+    }
+
+    public void Draw()
+    {
+        if (!IsVisible)
+            return;
+
+        DrawMainWindow();
+    }
+
+    private void DrawMainWindow()
+    {
+        ImGui.SetNextWindowSize(new Vector2(400, 300), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(300, 200), new Vector2(float.MaxValue, float.MaxValue));
+
+        if (ImGui.Begin("My First Plugin", ref IsVisible, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            ImGui.Text("Welcome to Dalamud plugin development!");
+            ImGui.Spacing();
+
+            ImGui.TextColored(new Vector4(0.5f, 1.0f, 0.5f, 1.0f), "This is a colored text");
+            ImGui.Spacing();
+
+            if (ImGui.Button("Click me!"))
+            {
+                clickCount++;
+            }
+
+            ImGui.SameLine();
+            ImGui.Text($"Clicked {clickCount} times");
+            
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+
+            if (ImGui.CollapsingHeader("Information"))
+            {
+                ImGui.BulletText("This plugin demonstrates basic functionality");
+                ImGui.BulletText("You can draw UI using ImGui");
+                ImGui.BulletText("Commands can be registered and handled");
+                ImGui.BulletText("Services are injected via constructor");
+            }
+        }
+        ImGui.End();
+    }
+
+    public void Dispose()
+    {
+        // Clean up any resources here
+    }
+}
+```
+
+## Understanding the Code
+
+### Dependency Injection
+
+Dalamud uses constructor injection to provide services:
+
+```csharp
+public Plugin(
+    IDalamudPluginInterface pluginInterface,
+    ICommandManager commandManager,
+    IChatGui chatGui)
+```
+
+You can request any Dalamud service as a constructor parameter. See the [Services API reference](/api/services/overview) for available services.
+
+### The Plugin Interface
+
+`IDalamudPluginInterface` is your main gateway to Dalamud:
+
+```csharp /plugin-dev/plugin-interface.mdx#L1-L100
+- **UiBuilder**: Register UI draw handlers
+- **Reason**: Why the plugin was loaded
+- **ConfigDirectory**: Where to save configuration files
+- **GetPluginConfig()**: Load saved configuration
+- **SavePluginConfig()**: Save configuration
+```
+
+See the [Plugin Interface guide](/plugin-dev/plugin-interface) for full details.
+
+### Command Registration
+
+```csharp
+this.commandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+{
+    HelpMessage = "Opens the My First Plugin window",
+    ShowInHelp = true  // Shows in /xlhelp
+});
+```
+
+Always remove commands in `Dispose()`:
+
+```csharp
+this.commandManager.RemoveHandler(CommandName);
+```
+
+### UI Drawing
+
+Subscribe to the Draw event:
+
+```csharp
+this.pluginInterface.UiBuilder.Draw += this.ui.Draw;
+```
+
+This gets called every frame. Keep your draw code efficient!
+
+<Warning>
+  Always unsubscribe from events in `Dispose()` to prevent memory leaks.
+</Warning>
+
+## Building and Testing
+
+<Steps>
+<Step title="Build the Project">
+
+```bash
+dotnet build
+```
+
+Or press `Ctrl+Shift+B` in Visual Studio.
+
+</Step>
+
+<Step title="Copy to Dev Plugins">
+
+The build output should be copied to:
+
+```
+%AppData%\XIVLauncher\devPlugins\MyFirstPlugin\
+```
+
+You can automate this with a post-build event in your `.csproj`:
+
+```xml
+<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Exec Command="xcopy /Y /I /E &quot;$(TargetDir)*&quot; &quot;$(AppData)\XIVLauncher\devPlugins\$(ProjectName)\&quot;" />
+</Target>
+```
+
+</Step>
+
+<Step title="Load in Game">
+
+1. Launch FFXIV with Dalamud
+2. Type `/xldev` to open the developer menu
+3. Go to the "Plugin Dev" tab
+4. Click "Load Plugin" next to your plugin
+5. Type `/pmyfirst` to open your window
+
+</Step>
+</Steps>
+
+## Configuration
+
+Add persistent configuration to your plugin:
+
+```csharp Configuration.cs
+using Dalamud.Configuration;
+
+namespace MyFirstPlugin;
+
+public class Configuration : IPluginConfiguration
+{
+    public int Version { get; set; } = 1;
+    
+    // Add your settings here
+    public bool SomeOption { get; set; } = true;
+    public string SomeText { get; set; } = "Default value";
+    
+    public void Save(IDalamudPluginInterface pluginInterface)
+    {
+        pluginInterface.SavePluginConfig(this);
+    }
+}
+```
+
+Load configuration in your plugin:
+
+```csharp
+private readonly Configuration config;
+
+public Plugin(IDalamudPluginInterface pluginInterface, ...)
+{
+    this.config = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+}
+```
+
+Save when settings change:
+
+```csharp
+this.config.SomeOption = newValue;
+this.config.Save(this.pluginInterface);
+```
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Singleton Pattern">
+    If you need to access your plugin instance from UI or other classes:
+
+    ```csharp
+    public sealed class Plugin : IDalamudPlugin
+    {
+        public static Plugin Instance { get; private set; } = null!;
+
+        public Plugin(...)
+        {
+            Instance = this;
+            // ...
+        }
+
+        public void Dispose()
+        {
+            Instance = null!;
+            // ...
+        }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Service Container">
+    Create a central service container:
+
+    ```csharp
+    public class Services
+    {
+        public IDalamudPluginInterface PluginInterface { get; init; } = null!;
+        public ICommandManager CommandManager { get; init; } = null!;
+        public IChatGui ChatGui { get; init; } = null!;
+        // Add more services as needed
+
+        public static void Initialize(Plugin plugin, ...)
+        {
+            Instance = new Services
+            {
+                PluginInterface = plugin.PluginInterface,
+                // ...
+            };
+        }
+
+        public static Services Instance { get; private set; } = null!;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Localization">
+    Support multiple languages:
+
+    ```csharp
+    var langCode = this.pluginInterface.UiLanguage;
+    
+    var text = langCode switch
+    {
+        "ja" => "こんにちは",
+        "de" => "Hallo",
+        "fr" => "Bonjour",
+        _ => "Hello"
+    };
+
+    // Listen for language changes
+    this.pluginInterface.LanguageChanged += OnLanguageChanged;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Plugin Manifest" icon="file" href="/plugin-dev/plugin-manifest">
+  Learn about all manifest fields and configuration options
+</Card>
+
+<Card title="Plugin Interface" icon="plug" href="/plugin-dev/plugin-interface">
+  Explore all IDalamudPluginInterface methods and properties
+</Card>
+
+<Card title="UI & ImGui" icon="window" href="/ui/ui-builder">
+  Create more complex user interfaces
+</Card>
+
+<Card title="Debugging" icon="bug" href="/plugin-dev/debugging">
+  Debug your plugin effectively
+</Card>
+
+</CardGroup>

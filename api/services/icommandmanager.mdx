@@ -1,0 +1,190 @@
+---
+title: ICommandManager
+description: Manage registered in-game slash commands
+---
+
+## Overview
+
+`ICommandManager` manages registered in-game slash commands. It allows plugins to register custom commands that players can use in the chat window.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Properties
+
+### Commands
+
+```csharp
+public ReadOnlyDictionary<string, IReadOnlyCommandInfo> Commands { get; }
+```
+
+Gets a read-only list of all registered commands.
+
+<ResponseField name="Commands" type="ReadOnlyDictionary<string, IReadOnlyCommandInfo>">
+  Dictionary of all registered commands, keyed by command name
+</ResponseField>
+
+## Methods
+
+### ProcessCommand
+
+```csharp
+public bool ProcessCommand(string content);
+```
+
+Processes a command in full.
+
+<ParamField path="content" type="string" required>
+  The full command string including the command name and arguments
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the command was found and dispatched
+</ResponseField>
+
+### DispatchCommand
+
+```csharp
+public void DispatchCommand(string command, string argument, IReadOnlyCommandInfo info);
+```
+
+Dispatches the handling of a command.
+
+<ParamField path="command" type="string" required>
+  The command to dispatch
+</ParamField>
+
+<ParamField path="argument" type="string" required>
+  The provided arguments
+</ParamField>
+
+<ParamField path="info" type="IReadOnlyCommandInfo" required>
+  A CommandInfo object describing this command
+</ParamField>
+
+### AddHandler
+
+```csharp
+public bool AddHandler(string command, CommandInfo info);
+```
+
+Adds a command handler, which you can use to add your own custom commands to the in-game chat.
+
+<ParamField path="command" type="string" required>
+  The command to register (e.g., "/mycommand")
+</ParamField>
+
+<ParamField path="info" type="CommandInfo" required>
+  A CommandInfo object describing the command
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if adding was successful, false if the command already exists
+</ResponseField>
+
+### RemoveHandler
+
+```csharp
+public bool RemoveHandler(string command);
+```
+
+Removes a command from the command handlers.
+
+<ParamField path="command" type="string" required>
+  The command to remove
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the removal was successful, false if the command was not found
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly ICommandManager commandManager;
+    private const string CommandName = "/mycommand";
+    
+    public MyPlugin(ICommandManager commandManager)
+    {
+        this.commandManager = commandManager;
+        
+        // Register a command
+        this.commandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Displays a greeting message",
+            ShowInHelp = true
+        });
+    }
+    
+    private void OnCommand(string command, string args)
+    {
+        // Parse arguments
+        if (string.IsNullOrEmpty(args))
+        {
+            Log.Information("Hello, World!");
+        }
+        else
+        {
+            Log.Information($"Hello, {args}!");
+        }
+    }
+    
+    public void Dispose()
+    {
+        this.commandManager.RemoveHandler(CommandName);
+    }
+}
+```
+
+## Advanced Usage
+
+### Command with Multiple Arguments
+
+```csharp
+private void OnCommand(string command, string args)
+{
+    var splitArgs = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    
+    if (splitArgs.Length == 0)
+    {
+        // No arguments provided
+        return;
+    }
+    
+    switch (splitArgs[0].ToLower())
+    {
+        case "show":
+            // Handle show subcommand
+            break;
+        case "hide":
+            // Handle hide subcommand
+            break;
+        default:
+            // Unknown subcommand
+            break;
+    }
+}
+```
+
+### Command with Help Text
+
+```csharp
+this.commandManager.AddHandler("/mycommand", new CommandInfo(OnCommand)
+{
+    HelpMessage = "Usage: /mycommand [show|hide] - Controls window visibility",
+    ShowInHelp = true
+});
+```
+
+## Remarks
+
+- Command names must start with a forward slash (`/`)
+- Command names are case-insensitive
+- Always remove command handlers in your plugin's `Dispose()` method
+- The `HelpMessage` will be displayed when players use `/xlhelp`
+- Multiple plugins cannot register the same command name

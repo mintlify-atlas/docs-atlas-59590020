@@ -1,0 +1,364 @@
+---
+title: IObjectTable
+description: Access spawned game objects and entities
+---
+
+## Overview
+
+`IObjectTable` represents the currently spawned FFXIV game objects. It provides access to all entities visible to the client, including players, NPCs, monsters, and other objects.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Properties
+
+### Address
+
+```csharp
+public nint Address { get; }
+```
+
+Gets the address of the object table.
+
+<ResponseField name="Address" type="nint">
+  The memory address of the object table
+</ResponseField>
+
+### Length
+
+```csharp
+public int Length { get; }
+```
+
+Gets the length of the object table.
+
+<ResponseField name="Length" type="int">
+  The total number of object slots
+</ResponseField>
+
+### LocalPlayer
+
+```csharp
+public IPlayerCharacter? LocalPlayer { get; }
+```
+
+Gets the local player character, if one is present.
+
+<ResponseField name="LocalPlayer" type="IPlayerCharacter?">
+  The local player character, or null if not logged in
+</ResponseField>
+
+### PlayerObjects
+
+```csharp
+public IEnumerable<IBattleChara> PlayerObjects { get; }
+```
+
+Gets an enumerator for accessing player objects. This will only contain BattleChara objects. Does not contain any mounts, minions, or accessories.
+
+<ResponseField name="PlayerObjects" type="IEnumerable<IBattleChara>">
+  Enumerable of player battle characters
+</ResponseField>
+
+### CharacterManagerObjects
+
+```csharp
+public IEnumerable<IGameObject> CharacterManagerObjects { get; }
+```
+
+Gets an enumerator for accessing character manager objects. Contains all objects in indexes [0, 199]. Includes mounts, minions, accessories, and players.
+
+<ResponseField name="CharacterManagerObjects" type="IEnumerable<IGameObject>">
+  Enumerable of character manager objects
+</ResponseField>
+
+### ClientObjects
+
+```csharp
+public IEnumerable<IGameObject> ClientObjects { get; }
+```
+
+Gets an enumerator for accessing client objects. Contains all objects in indexes [200, 448].
+
+<ResponseField name="ClientObjects" type="IEnumerable<IGameObject>">
+  Enumerable of client objects
+</ResponseField>
+
+### EventObjects
+
+```csharp
+public IEnumerable<IGameObject> EventObjects { get; }
+```
+
+Gets an enumerator for accessing event objects. Contains all objects in indexes [449, 488].
+
+<ResponseField name="EventObjects" type="IEnumerable<IGameObject>">
+  Enumerable of event objects
+</ResponseField>
+
+### StandObjects
+
+```csharp
+public IEnumerable<IGameObject> StandObjects { get; }
+```
+
+Gets an enumerator for accessing stand objects. Contains all objects in indexes [489, 628].
+
+<ResponseField name="StandObjects" type="IEnumerable<IGameObject>">
+  Enumerable of stand objects (housing fixtures, etc.)
+</ResponseField>
+
+### ReactionEventObjects
+
+```csharp
+public IEnumerable<IGameObject> ReactionEventObjects { get; }
+```
+
+Gets an enumerator for accessing reaction event objects. Contains all objects in indexes [629, 728].
+
+<ResponseField name="ReactionEventObjects" type="IEnumerable<IGameObject>">
+  Enumerable of reaction event objects
+</ResponseField>
+
+## Methods
+
+### Indexer
+
+```csharp
+public IGameObject? this[int index] { get; }
+```
+
+Gets an object at the specified spawn index.
+
+<ParamField path="index" type="int" required>
+  Spawn index (0 to Length-1)
+</ParamField>
+
+<ResponseField name="return" type="IGameObject?">
+  A GameObject at the specified spawn index, or null if empty
+</ResponseField>
+
+### SearchById
+
+```csharp
+public IGameObject? SearchById(ulong gameObjectId);
+```
+
+Searches for a game object by their Object ID.
+
+<ParamField path="gameObjectId" type="ulong" required>
+  Object ID to find
+</ParamField>
+
+<ResponseField name="return" type="IGameObject?">
+  The game object, or null if not found
+</ResponseField>
+
+### SearchByEntityId
+
+```csharp
+public IGameObject? SearchByEntityId(uint entityId);
+```
+
+Searches for a game object by the Entity ID.
+
+<ParamField path="entityId" type="uint" required>
+  Entity ID to find
+</ParamField>
+
+<ResponseField name="return" type="IGameObject?">
+  The game object, or null if not found
+</ResponseField>
+
+### GetObjectAddress
+
+```csharp
+public nint GetObjectAddress(int index);
+```
+
+Gets the address of the game object at the specified index of the object table.
+
+<ParamField path="index" type="int" required>
+  The index of the object
+</ParamField>
+
+<ResponseField name="return" type="nint">
+  The memory address of the object
+</ResponseField>
+
+### CreateObjectReference
+
+```csharp
+public IGameObject? CreateObjectReference(nint address);
+```
+
+Creates a reference to an FFXIV game object.
+
+<ParamField path="address" type="nint" required>
+  The address of the object in memory
+</ParamField>
+
+<ResponseField name="return" type="IGameObject?">
+  GameObject object or inheritor containing the requested data
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IObjectTable objectTable;
+    
+    public MyPlugin(IObjectTable objectTable)
+    {
+        this.objectTable = objectTable;
+    }
+    
+    public void ListAllObjects()
+    {
+        foreach (var obj in this.objectTable)
+        {
+            if (obj == null) continue;
+            
+            Log.Information($"Object: {obj.Name} (Kind: {obj.ObjectKind}, ID: {obj.EntityId})");
+        }
+    }
+    
+    public void ListPlayers()
+    {
+        foreach (var player in this.objectTable)
+        {
+            if (player is IPlayerCharacter pc)
+            {
+                Log.Information($"Player: {pc.Name} (Level {pc.Level} {pc.ClassJob.ValueNullable?.Name})");
+                Log.Information($"  Position: {pc.Position}");
+                Log.Information($"  HP: {pc.CurrentHp}/{pc.MaxHp}");
+            }
+        }
+    }
+    
+    public void FindNearbyEnemies(float maxDistance)
+    {
+        var player = this.objectTable.LocalPlayer;
+        if (player == null) return;
+        
+        foreach (var obj in this.objectTable)
+        {
+            if (obj is IBattleNpc npc && npc.BattleNpcKind == BattleNpcSubKind.Enemy)
+            {
+                var distance = Vector3.Distance(player.Position, npc.Position);
+                if (distance <= maxDistance)
+                {
+                    Log.Information($"Enemy: {npc.Name} at {distance:F2}m");
+                }
+            }
+        }
+    }
+    
+    public IGameObject? FindObjectByName(string name)
+    {
+        foreach (var obj in this.objectTable)
+        {
+            if (obj?.Name.TextValue.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return obj;
+            }
+        }
+        
+        return null;
+    }
+}
+```
+
+## Advanced Usage
+
+### Filtering by Object Type
+
+```csharp
+public void ListObjectsByType()
+{
+    // Get only players
+    var players = this.objectTable
+        .Where(o => o?.ObjectKind == ObjectKind.Player)
+        .Cast<IPlayerCharacter>();
+    
+    // Get only battle NPCs
+    var npcs = this.objectTable
+        .Where(o => o?.ObjectKind == ObjectKind.BattleNpc)
+        .Cast<IBattleNpc>();
+    
+    // Get only event objects
+    var eventObjs = this.objectTable
+        .Where(o => o?.ObjectKind == ObjectKind.EventObj)
+        .Cast<IEventObj>();
+}
+```
+
+### Working with Specific Object Ranges
+
+```csharp
+public void CheckPlayerRange()
+{
+    // Only check character manager objects (includes players)
+    foreach (var obj in this.objectTable.CharacterManagerObjects)
+    {
+        if (obj is IPlayerCharacter pc)
+        {
+            Log.Information($"Found player in CM range: {pc.Name}");
+        }
+    }
+}
+```
+
+### Distance Calculations
+
+```csharp
+public IGameObject? GetClosestEnemy()
+{
+    var player = this.objectTable.LocalPlayer;
+    if (player == null) return null;
+    
+    IGameObject? closest = null;
+    float closestDistance = float.MaxValue;
+    
+    foreach (var obj in this.objectTable)
+    {
+        if (obj is IBattleNpc npc && npc.BattleNpcKind == BattleNpcSubKind.Enemy)
+        {
+            var distance = Vector3.Distance(player.Position, npc.Position);
+            if (distance < closestDistance)
+            {
+                closest = npc;
+                closestDistance = distance;
+            }
+        }
+    }
+    
+    return closest;
+}
+```
+
+### Searching by ID
+
+```csharp
+public void FindSpecificObject()
+{
+    // Search by Entity ID (visible in game as target ID)
+    var objByEntity = this.objectTable.SearchByEntityId(0x12345678);
+    
+    // Search by Object ID (internal game object ID)
+    var objById = this.objectTable.SearchById(0x123456789ABCDEF0);
+}
+```
+
+## Remarks
+
+- The object table implements `IEnumerable<IGameObject>` so you can use LINQ
+- Not all object slots are always populated; check for null
+- Objects can be cast to more specific types like `IPlayerCharacter`, `IBattleChara`, `IBattleNpc`, etc.
+- The object table updates every frame; objects may appear or disappear
+- Object addresses and references become invalid when objects despawn
+- Use `LocalPlayer` instead of the deprecated `IClientState.LocalPlayer`

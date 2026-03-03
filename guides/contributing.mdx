@@ -1,0 +1,340 @@
+---
+title: Contributing to Dalamud
+description: Guidelines and best practices for contributing to the Dalamud project
+---
+
+Thank you for your interest in contributing to Dalamud! This guide outlines the process and standards for contributions.
+
+## Getting Started
+
+<Steps>
+  <Step title="Fork and clone the repository">
+    ```bash
+    git clone --recursive https://github.com/YOUR_USERNAME/Dalamud.git
+    cd Dalamud
+    ```
+
+    Make sure to use `--recursive` to initialize all submodules.
+  </Step>
+
+  <Step title="Create a feature branch">
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
+
+    Use descriptive branch names:
+    - `feature/add-xyz` for new features
+    - `fix/resolve-abc` for bug fixes
+    - `refactor/improve-xyz` for refactoring
+  </Step>
+
+  <Step title="Set up your development environment">
+    Follow the [Building Dalamud](/guides/building-dalamud) guide to ensure your environment is properly configured.
+  </Step>
+</Steps>
+
+## Code Standards
+
+### C# Coding Style
+
+Dalamud uses StyleCop.Analyzers for code quality enforcement.
+
+<CodeGroup>
+```xml Directory.Build.props
+<PropertyGroup Label="Target">
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>preview</LangVersion>
+</PropertyGroup>
+```
+
+```xml StyleCop Configuration
+<PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
+    <PrivateAssets>all</PrivateAssets>
+    <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+</PackageReference>
+```
+</CodeGroup>
+
+**Key conventions:**
+- Use meaningful names for variables, methods, and classes
+- Follow C# naming conventions (PascalCase for public members, camelCase for private)
+- Enable nullable reference types (`<Nullable>annotations</Nullable>` or `<Nullable>enable</Nullable>`)
+- Use XML documentation comments for public APIs
+- Unsafe code is allowed where necessary (`<AllowUnsafeBlocks>true</AllowUnsafeBlocks>`)
+
+### Code Analysis
+
+Dalamud enforces code analysis rules:
+
+```xml
+<PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" />
+<AdditionalFiles Include="tools\BannedSymbols.txt" />
+```
+
+Suppressed warnings (configured per project):
+```
+IDE0002  - Simplify member access
+IDE0003  - This and me preferences
+IDE1006  - Naming violations
+IDE0044  - Add readonly modifier
+CA1822   - Can be marked as static
+CS1591   - Missing XML comment
+```
+
+### C++ Coding Style
+
+For native components (Dalamud.Boot, DalamudCrashHandler):
+
+- Use C++23 standard (`<LanguageStandard>stdcpp23</LanguageStandard>`)
+- Follow modern C++ practices
+- Use precompiled headers where appropriate
+- Target x64 platform only
+- Use Unicode character set
+
+## Testing Requirements
+
+<Warning>
+All contributions must include appropriate tests where applicable.
+</Warning>
+
+### Writing Unit Tests
+
+Dalamud uses xunit v3 for testing:
+
+```csharp Dalamud.Test/ExampleTest.cs
+using Xunit;
+
+namespace Dalamud.Test
+{
+    public class MyFeatureTests
+    {
+        [Fact]
+        public void TestMyFeature()
+        {
+            // Arrange
+            var feature = new MyFeature();
+            
+            // Act
+            var result = feature.DoSomething();
+            
+            // Assert
+            Assert.NotNull(result);
+        }
+    }
+}
+```
+
+### Running Tests
+
+```powershell
+# Run all tests
+./build.ps1 Test
+
+# Or use dotnet CLI directly
+dotnet test Dalamud.Test/Dalamud.Test.csproj
+```
+
+Tests run automatically in CI on all PRs.
+
+## Pull Request Process
+
+<Steps>
+  <Step title="Ensure your changes build successfully">
+    ```powershell
+    ./build.ps1 CI
+    ```
+
+    This runs the full CI build including tests.
+  </Step>
+
+  <Step title="Commit your changes">
+    Write clear, descriptive commit messages:
+
+    ```bash
+    git add .
+    git commit -m "feat: add new plugin API for XYZ"
+    ```
+
+    Commit message prefixes:
+    - `feat:` - New features
+    - `fix:` - Bug fixes
+    - `refactor:` - Code refactoring
+    - `test:` - Test additions/changes
+    - `docs:` - Documentation updates
+    - `chore:` - Maintenance tasks
+  </Step>
+
+  <Step title="Push to your fork">
+    ```bash
+    git push origin feature/your-feature-name
+    ```
+  </Step>
+
+  <Step title="Open a Pull Request">
+    1. Go to the [Dalamud repository](https://github.com/goatcorp/Dalamud)
+    2. Click "New Pull Request"
+    3. Select your fork and branch
+    4. Fill out the PR template with:
+       - Clear description of changes
+       - Related issue numbers (if applicable)
+       - Testing performed
+       - Screenshots (for UI changes)
+  </Step>
+</Steps>
+
+## API Compatibility
+
+<Warning>
+Breaking changes to the public API require careful consideration and approval.
+</Warning>
+
+All PRs are automatically checked for API compatibility using Microsoft.DotNet.ApiCompat.Tool:
+
+```powershell
+apicompat -l "left\Dalamud.dll" -r "right\Dalamud.dll" --noWarn "CP0006"
+```
+
+Checked assemblies:
+- `Dalamud.dll`
+- `FFXIVClientStructs.dll`
+- `Lumina.dll`
+- `Lumina.Excel.dll`
+
+If you need to make a breaking change:
+1. Discuss in an issue first
+2. Document the breaking change clearly
+3. Provide migration guidance
+4. Update the changelog
+
+## Documentation
+
+### XML Documentation Comments
+
+All public APIs must have XML documentation:
+
+```csharp
+/// <summary>
+/// Provides access to the game's chat system.
+/// </summary>
+/// <remarks>
+/// This service allows plugins to send messages, handle incoming chat,
+/// and interact with chat channels.
+/// </remarks>
+public class ChatGui
+{
+    /// <summary>
+    /// Sends a message to the specified chat channel.
+    /// </summary>
+    /// <param name="message">The message to send.</param>
+    /// <param name="channel">The target chat channel.</param>
+    /// <exception cref="ArgumentNullException">If message is null.</exception>
+    public void SendMessage(string message, ChatChannel channel)
+    {
+        // Implementation
+    }
+}
+```
+
+### Documentation Files
+
+When adding major features, update:
+- API documentation (if applicable)
+- README.md (for user-facing changes)
+- Changelog (via GitHub release notes)
+
+## Submodule Updates
+
+<Warning>
+Be cautious when updating submodules as they affect all plugin developers.
+</Warning>
+
+Key submodules:
+- `lib/FFXIVClientStructs` - Game structure definitions
+- `lib/Lumina.Excel` - Game data reading
+- `lib/TsudaKageyu-minhook` - Hooking library
+
+To update a submodule:
+
+```bash
+cd lib/FFXIVClientStructs
+git checkout master
+git pull origin master
+cd ../..
+git add lib/FFXIVClientStructs
+git commit -m "chore: update FFXIVClientStructs to latest"
+```
+
+## Code of Conduct
+
+### Community Standards
+
+- Be respectful and constructive
+- Focus on the technical merits of contributions
+- Welcome newcomers and help them learn
+- Report inappropriate behavior to maintainers
+
+### Review Process
+
+- Expect feedback and iteration on your PR
+- Respond to review comments promptly
+- Be open to suggestions and alternative approaches
+- Maintainers may request changes or additional tests
+
+## Special Considerations
+
+### Security
+
+<Warning>
+Never commit sensitive data like API keys, tokens, or credentials.
+</Warning>
+
+If you discover a security vulnerability:
+1. **Do not** open a public issue
+2. Report privately to the maintainers via Discord
+3. Wait for acknowledgment before public disclosure
+
+### Game Updates
+
+Dalamud must be updated when FFXIV patches:
+- Structure offsets in FFXIVClientStructs
+- Function signatures for hooks
+- Game data changes for Lumina
+
+These updates are typically handled by core maintainers.
+
+### Performance
+
+Be mindful of performance:
+- Avoid allocations in hot paths
+- Use object pooling for frequently allocated objects
+- Profile changes that affect core game loops
+- Consider using `stackalloc` for small temporary buffers
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Building Dalamud" icon="hammer" href="/guides/building-dalamud">
+    Set up your build environment
+  </Card>
+  <Card title="Testing" icon="flask" href="/guides/testing">
+    Learn about testing approaches
+  </Card>
+  <Card title="Discord Server" icon="discord" href="https://discord.gg/3NMcUV5">
+    Join the developer community
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/goatcorp/Dalamud/issues">
+    Report bugs or request features
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you need assistance:
+
+1. Check existing documentation and issues
+2. Ask in the [Discord server](https://discord.gg/3NMcUV5) #dev channel
+3. Open a discussion on GitHub for design questions
+4. Ping maintainers in your PR if you're stuck
+
+Thank you for contributing to Dalamud!

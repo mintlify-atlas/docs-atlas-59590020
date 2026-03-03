@@ -1,0 +1,607 @@
+---
+title: Troubleshooting
+description: Common issues and solutions when building or developing with Dalamud
+---
+
+This guide helps you resolve common issues encountered when building, testing, or developing with Dalamud.
+
+## Build Issues
+
+### .NET SDK Problems
+
+<AccordionGroup>
+  <Accordion title="SDK version not found">
+    **Error:**
+    ```
+    The current .NET SDK does not support targeting .NET 10.0
+    ```
+
+    **Cause:** Missing or incorrect .NET SDK version.
+
+    **Solutions:**
+
+    <Steps>
+      <Step title="Let build script download SDK">
+        The build scripts automatically download the correct SDK:
+        ```powershell
+        # Windows
+        .\build.ps1
+
+        # Linux
+        ./build.sh
+        ```
+        SDK is downloaded to `.nuke/temp/dotnet-win` or `.nuke/temp/dotnet-unix`
+      </Step>
+
+      <Step title="Manual SDK installation">
+        Download .NET 10.0 SDK from [https://dot.net](https://dot.net)
+
+        Verify installation:
+        ```bash
+        dotnet --version
+        # Should show: 10.0.x
+        ```
+      </Step>
+
+      <Step title="Check global.json">
+        Ensure `global.json` is not corrupted:
+        ```json
+        {
+          "sdk": {
+            "version": "10.0.0",
+            "rollForward": "latestMinor",
+            "allowPrerelease": true
+          }
+        }
+        ```
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="SDK rollforward errors">
+    **Error:**
+    ```
+    A compatible SDK version for global.json could not be found
+    ```
+
+    **Solution:**
+    The SDK will roll forward to newer minor versions. Ensure you have at least version `10.0.0` or let the build script handle it.
+
+    Check installed SDKs:
+    ```bash
+    dotnet --list-sdks
+    ```
+  </Accordion>
+
+  <Accordion title="Preview SDK required">
+    **Error:**
+    ```
+    Preview SDK required but not enabled
+    ```
+
+    **Solution:**
+    The `global.json` enables preview features:
+    ```json
+    "allowPrerelease": true
+    ```
+
+    This is required because Dalamud uses `LangVersion: preview` for C# language features.
+  </Accordion>
+</AccordionGroup>
+
+### MSBuild and C++ Compilation
+
+<AccordionGroup>
+  <Accordion title="MSBuild not found">
+    **Error:**
+    ```
+    MSBuild.exe is not recognized as an internal or external command
+    ```
+
+    **Solutions:**
+
+    1. **Install Visual Studio 2022**
+       - Download from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/)
+       - Install with "Desktop development with C++" workload
+
+    2. **Use Developer Command Prompt**
+       - Open "Developer Command Prompt for VS 2022"
+       - Navigate to Dalamud directory
+       - Run `./build.ps1`
+
+    3. **Add MSBuild to PATH**
+       ```powershell
+       # Typical location:
+       C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin
+       ```
+  </Accordion>
+
+  <Accordion title="Platform Toolset v143 missing">
+    **Error:**
+    ```
+    The build tools for v143 (Platform Toolset = 'v143') cannot be found
+    ```
+
+    **Cause:** Missing C++ build tools for Visual Studio 2022.
+
+    **Solution:**
+    Run Visual Studio Installer:
+    1. Modify your VS 2022 installation
+    2. Select "Desktop development with C++"
+    3. Ensure these components are checked:
+       - MSVC v143 - VS 2022 C++ x64/x86 build tools
+       - Windows 10 SDK (latest version)
+       - C++ CMake tools for Windows
+  </Accordion>
+
+  <Accordion title="Windows SDK not found">
+    **Error:**
+    ```
+    Windows SDK version 10.0 was not found
+    ```
+
+    **Solution:**
+    Install Windows 10 SDK:
+    - Via Visual Studio Installer (Individual Components tab)
+    - Or download standalone from Microsoft
+
+    The project uses:
+    ```xml
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    ```
+  </Accordion>
+
+  <Accordion title="MASM not found">
+    **Error:**
+    ```
+    MASM (x64) not found
+    ```
+
+    **Cause:** Dalamud.Boot uses MASM for assembly files (`rewrite_entrypoint_thunks.asm`).
+
+    **Solution:**
+    Install via Visual Studio Installer:
+    - Individual Components → Compilers → MASM (x64)
+  </Accordion>
+</AccordionGroup>
+
+### Submodule Issues
+
+<AccordionGroup>
+  <Accordion title="Submodule not initialized">
+    **Error:**
+    ```
+    The type or namespace 'FFXIVClientStructs' could not be found
+    ```
+
+    **Cause:** Git submodules not initialized.
+
+    **Solution:**
+    ```bash
+    git submodule update --init --recursive
+    ```
+
+    Verify submodules:
+    ```bash
+    git submodule status
+    # Should show commits, not dashes:
+    # 1234567... lib/FFXIVClientStructs (v1.0.0)
+    ```
+  </Accordion>
+
+  <Accordion title="Submodule detached HEAD">
+    **Warning:**
+    ```
+    You are in 'detached HEAD' state in submodule
+    ```
+
+    **Explanation:** This is normal for submodules. They're pinned to specific commits.
+
+    **To update submodule:**
+    ```bash
+    cd lib/FFXIVClientStructs
+    git checkout master
+    git pull origin master
+    cd ../..
+    git add lib/FFXIVClientStructs
+    git commit -m "chore: update FFXIVClientStructs"
+    ```
+  </Accordion>
+
+  <Accordion title="Submodule permission denied (SSH)">
+    **Error:**
+    ```
+    Permission denied (publickey) when cloning submodules
+    ```
+
+    **Solution:**
+    Convert submodule URLs from SSH to HTTPS:
+    ```bash
+    git config --global url."https://github.com/".insteadOf git@github.com:
+    git submodule sync
+    git submodule update --init --recursive
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Dependency Problems
+
+<AccordionGroup>
+  <Accordion title="NuGet restore failures">
+    **Error:**
+    ```
+    Unable to load the service index for source https://api.nuget.org/v3/index.json
+    ```
+
+    **Solutions:**
+
+    1. **Check network connectivity**
+       ```bash
+       curl https://api.nuget.org/v3/index.json
+       ```
+
+    2. **Clear NuGet cache**
+       ```bash
+       dotnet nuget locals all --clear
+       ./build.ps1 Restore
+       ```
+
+    3. **Check firewall/proxy settings**
+       Configure NuGet proxy if behind corporate firewall
+  </Accordion>
+
+  <Accordion title="Package version conflicts">
+    **Error:**
+    ```
+    NU1608: Detected package version outside of dependency constraint
+    ```
+
+    **Cause:** Dalamud uses Central Package Management (`Directory.Packages.props`).
+
+    **Solution:**
+    Package versions are centrally managed. Don't specify versions in individual projects:
+
+    ```xml
+    <!-- Correct -->
+    <PackageReference Include="Newtonsoft.Json" />
+
+    <!-- Incorrect -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    ```
+
+    Version is defined in `Directory.Packages.props`:
+    ```xml
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    ```
+  </Accordion>
+
+  <Accordion title="Missing native dependencies">
+    **Error:**
+    ```
+    Could not load file or assembly 'cimgui.dll'
+    ```
+
+    **Cause:** Native C++ DLLs not built.
+
+    **Solution:**
+    Ensure full build completes:
+    ```powershell
+    ./build.ps1 Clean
+    ./build.ps1 Compile
+    ```
+
+    Check that these exist in `bin/Debug` or `bin/Release`:
+    - `cimgui.dll`
+    - `cimplot.dll`
+    - `cimguizmo.dll`
+    - `Dalamud.Boot.dll`
+  </Accordion>
+</AccordionGroup>
+
+## Runtime Issues
+
+<AccordionGroup>
+  <Accordion title="Dalamud fails to inject">
+    **Symptoms:** Game launches but Dalamud doesn't load.
+
+    **Debug steps:**
+
+    1. **Check XIVLauncher logs**
+       - `%APPDATA%\XIVLauncher\output.log`
+       - Look for injection errors
+
+    2. **Verify Dalamud files**
+       - `%APPDATA%\XIVLauncher\addon\Hooks\dev\`
+       - Ensure all DLLs are present
+
+    3. **Check for antivirus interference**
+       - Add exception for XIVLauncher directory
+       - Add exception for FFXIV directory
+
+    4. **Test with clean profile**
+       - Rename `%APPDATA%\XIVLauncher` temporarily
+       - Launch with fresh configuration
+  </Accordion>
+
+  <Accordion title="Plugin compatibility errors">
+    **Error:**
+    ```
+    Could not load plugin: API version mismatch
+    ```
+
+    **Cause:** Breaking API changes in your build.
+
+    **Solution:**
+    Check API compatibility:
+    ```powershell
+    # Compare against staging
+    apicompat -l "old\Dalamud.dll" -r "new\Dalamud.dll"
+    ```
+
+    If intentional breaking change:
+    - Update `DalamudVersion` in `Dalamud.csproj`
+    - Document migration path
+    - Update changelog
+  </Accordion>
+
+  <Accordion title="Game crashes on startup">
+    **Possible causes:**
+    - Invalid hooks
+    - Memory corruption
+    - Incompatible game version
+
+    **Debug approach:**
+
+    1. **Enable crash dumps**
+       - DalamudCrashHandler should generate dumps
+       - Check `%APPDATA%\XIVLauncher\crashes\`
+
+    2. **Test without plugins**
+       - Disable all third-party plugins
+       - Narrow down to specific component
+
+    3. **Check game version**
+       - Ensure FFXIVClientStructs is up to date
+       - Game updates may break hooks
+  </Accordion>
+</AccordionGroup>
+
+## Test Failures
+
+<AccordionGroup>
+  <Accordion title="Tests not discovered">
+    **Symptoms:** Test Explorer shows no tests.
+
+    **Solutions:**
+
+    1. **Rebuild test project**
+       ```bash
+       dotnet build Dalamud.Test/Dalamud.Test.csproj
+       ```
+
+    2. **Verify xunit packages**
+       ```xml
+       <PackageReference Include="xunit.v3" />
+       <PackageReference Include="xunit.v3.assert" />
+       <PackageReference Include="xunit.runner.visualstudio" />
+       ```
+
+    3. **Check test class is public**
+       ```csharp
+       public class MyTests  // Must be public
+       {
+           [Fact]
+           public void Test() { }  // Must be public
+       }
+       ```
+  </Accordion>
+
+  <Accordion title="File not found in tests">
+    **Error:**
+    ```
+    FileNotFoundException: Could not find file 'test_data.txt'
+    ```
+
+    **Cause:** Test data files not copied to output.
+
+    **Solution:**
+    Add to `.csproj`:
+    ```xml
+    <ItemGroup>
+      <None Update="test_data.txt">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+    ```
+
+    Or use `Assembly.GetExecutingAssembly().Location` to locate files.
+  </Accordion>
+
+  <Accordion title="Tests pass locally, fail in CI">
+    **Common causes:**
+
+    1. **Culture differences**
+       ```csharp
+       // Bad - culture dependent
+       Assert.Equal("1.5", value.ToString());
+
+       // Good - culture invariant
+       Assert.Equal("1.5", value.ToString(CultureInfo.InvariantCulture));
+       ```
+
+    2. **Path separators**
+       ```csharp
+       // Bad
+       var path = "folder\\file.txt";
+
+       // Good
+       var path = Path.Combine("folder", "file.txt");
+       ```
+
+    3. **Missing dependencies**
+       - Check CI logs for missing files
+       - Ensure test data is committed to repo
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow build times">
+    **Solutions:**
+
+    1. **Disable virus scanning for build directories**
+       - Exclude project directory
+       - Exclude `.nuke`, `bin`, `obj` folders
+
+    2. **Use incremental builds**
+       ```powershell
+       # Don't clean every time
+       ./build.ps1  # Instead of ./build.ps1 Clean Compile
+       ```
+
+    3. **Close other applications**
+       - MSBuild is CPU/memory intensive
+       - Close Visual Studio when using command line builds
+
+    4. **Check disk I/O**
+       - Use SSD for source code
+       - Consider RAM disk for temp files
+  </Accordion>
+
+  <Accordion title="High memory usage during build">
+    **MSBuild node reuse:**
+
+    The build scripts disable node reuse for clean builds:
+    ```bash
+    dotnet build /nodeReuse:false /p:UseSharedCompilation=false
+    ```
+
+    For development, you can enable it for faster builds:
+    ```bash
+    dotnet build Dalamud/Dalamud.csproj
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Platform-Specific Issues
+
+### Windows
+
+<AccordionGroup>
+  <Accordion title="Long path errors">
+    **Error:**
+    ```
+    The specified path, file name, or both are too long
+    ```
+
+    **Solution:**
+    Enable long path support:
+    ```powershell
+    # Run as Administrator
+    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+      -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+    ```
+
+    Or clone to shorter path:
+    ```bash
+    git clone https://github.com/goatcorp/Dalamud.git C:\dev\dal
+    ```
+  </Accordion>
+
+  <Accordion title="Execution policy errors">
+    **Error:**
+    ```
+    build.ps1 cannot be loaded because running scripts is disabled
+    ```
+
+    **Solution:**
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ./build.ps1
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Linux
+
+<AccordionGroup>
+  <Accordion title="Cannot build C++ components">
+    **Expected behavior:** Linux builds skip native components.
+
+    The build system detects this and skips:
+    - `CompileCImGui`
+    - `CompileCImPlot`
+    - `CompileCImGuizmo`
+    - `CompileDalamudBoot`
+    - `CompileDalamudCrashHandler`
+
+    Only managed code (C#) is built on Linux.
+  </Accordion>
+
+  <Accordion title="Permission denied on build.sh">
+    **Error:**
+    ```
+    bash: ./build.sh: Permission denied
+    ```
+
+    **Solution:**
+    ```bash
+    chmod +x build.sh
+    ./build.sh
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+<CardGroup cols={2}>
+  <Card title="Discord Server" icon="discord" href="https://discord.gg/3NMcUV5">
+    Ask in #dev channel for development questions
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/goatcorp/Dalamud/issues">
+    Report bugs or search existing issues
+  </Card>
+  <Card title="Build Logs" icon="file-lines">
+    Always include full build output when asking for help
+  </Card>
+  <Card title="System Info" icon="computer">
+    Provide OS, .NET version, and Visual Studio version
+  </Card>
+</CardGroup>
+
+## Diagnostic Commands
+
+Run these to gather information for bug reports:
+
+```powershell
+# System info
+dotnet --info
+
+# SDK versions
+dotnet --list-sdks
+
+# Runtime versions
+dotnet --list-runtimes
+
+# MSBuild version
+msbuild -version
+
+# Git status
+git status
+git submodule status
+
+# Build with verbose logging
+./build.ps1 --verbosity detailed
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building Dalamud" icon="hammer" href="/guides/building-dalamud">
+    Return to build instructions
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/guides/contributing">
+    Learn how to contribute
+  </Card>
+</CardGroup>

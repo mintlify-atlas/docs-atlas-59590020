@@ -1,0 +1,216 @@
+---
+title: IPC & Shared Data Overview
+description: Learn how to enable inter-plugin communication and data sharing in Dalamud
+---
+
+Dalamud's Inter-Plugin Communication (IPC) system allows plugins to communicate with each other and share data efficiently. This enables plugins to expose functionality for others to consume and build ecosystems of interoperable plugins.
+
+## What is IPC?
+
+IPC (Inter-Plugin Communication) provides two main capabilities:
+
+1. **CallGate System**: Remote procedure calls (RPC) between plugins
+2. **Data Sharing**: Efficient sharing of reference-type data without serialization overhead
+
+## CallGate System
+
+The CallGate system uses a publisher-subscriber pattern where:
+
+- **Providers** (publishers) expose functions and send notifications
+- **Subscribers** (consumers) call those functions and receive notifications
+
+Both providers and subscribers use a unique string identifier (the "gate name") to find each other.
+
+### Key Features
+
+- Type-safe communication with generic type parameters
+- Supports up to 8 parameters plus a return type
+- Automatic serialization for complex types via JSON
+- Same-thread execution for predictable behavior
+- Context information about the calling plugin
+
+### Communication Patterns
+
+**Remote Procedure Calls (RPC)**
+- Subscribers invoke functions registered by providers
+- Supports both actions (no return value) and functions (with return value)
+
+**Event Notifications**
+- Providers broadcast messages to all subscribers
+- Multiple subscribers can listen to the same channel
+- Executed sequentially in registration order
+
+## Data Sharing
+
+The DataShare system provides reference-counted sharing of data between plugins:
+
+- Share instances of reference types without copying
+- Automatic lifecycle management with reference counting
+- Only works with types from Dalamud or shared assemblies
+- Automatic disposal when all consumers release the data
+
+<Note>
+  Data sharing is more efficient than CallGate for large, read-only data structures since it avoids serialization overhead.
+</Note>
+
+## Getting Started
+
+Access IPC functionality through `IDalamudPluginInterface`:
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IDalamudPluginInterface pluginInterface;
+    
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        this.pluginInterface = pluginInterface;
+    }
+}
+```
+
+### Provider Pattern
+
+Create a provider to expose functionality:
+
+```csharp
+var provider = this.pluginInterface.GetIpcProvider<string, int>("MyPlugin.DoSomething");
+provider.RegisterFunc(input => {
+    // Your implementation
+    return input.Length;
+});
+```
+
+### Subscriber Pattern
+
+Create a subscriber to consume functionality:
+
+```csharp
+var subscriber = this.pluginInterface.GetIpcSubscriber<string, int>("MyPlugin.DoSomething");
+
+try
+{
+    var result = subscriber.InvokeFunc("Hello");
+    // Use result
+}
+catch (IpcNotReadyError)
+{
+    // Provider not available yet
+}
+```
+
+## Best Practices
+
+### Naming Conventions
+
+Use a consistent naming scheme for your IPC gates:
+
+```
+<PluginName>.<FunctionName>
+```
+
+Example: `"Glamourer.GetCurrentGlamour"`
+
+### Versioning
+
+For breaking changes, include version numbers:
+
+```
+<PluginName>.<FunctionName>.v<Version>
+```
+
+Example: `"MyPlugin.GetData.v2"`
+
+### Error Handling
+
+<Warning>
+  Always wrap IPC calls in try-catch blocks. The target plugin may not be loaded, or the function may throw exceptions.
+</Warning>
+
+```csharp
+try
+{
+    var result = subscriber.InvokeFunc("input");
+}
+catch (IpcNotReadyError)
+{
+    // Provider hasn't registered a function yet
+}
+catch (IpcTypeMismatchError)
+{
+    // Type signature doesn't match
+}
+catch (Exception ex)
+{
+    // Provider threw an exception
+}
+```
+
+### Availability Checking
+
+Check if a provider is ready before calling:
+
+```csharp
+if (subscriber.HasFunction)
+{
+    var result = subscriber.InvokeFunc("input");
+}
+```
+
+### Cleanup
+
+Always unregister providers when your plugin unloads:
+
+```csharp
+public void Dispose()
+{
+    this.provider?.UnregisterFunc();
+    this.provider?.UnregisterAction();
+}
+```
+
+## Type Compatibility
+
+### Supported Types
+
+- Primitive types (int, string, bool, etc.)
+- Enums
+- Classes and structs (serialized via JSON)
+- Dalamud types (ICharacter, IGameObject, etc.)
+- Arrays and collections
+
+### Type Conversion
+
+When types don't match exactly, Dalamud attempts automatic conversion:
+
+1. Check inheritance hierarchy
+2. JSON serialization/deserialization
+3. Compatible type matching (field/property names)
+
+<Note>
+  For best performance, use exact type matches between provider and subscriber.
+</Note>
+
+## Thread Safety
+
+<Warning>
+  All IPC calls execute on the same thread as the caller. Ensure your implementations are fast and don't block.
+</Warning>
+
+- Providers execute on the subscriber's thread
+- Notifications execute sequentially on the provider's thread
+- No automatic thread synchronization is provided
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CallGate Provider" icon="tower-broadcast" href="/ipc/callgate-provider">
+    Learn how to expose functionality to other plugins
+  </Card>
+  <Card title="CallGate Subscriber" icon="tower-cell" href="/ipc/callgate-subscriber">
+    Learn how to consume functionality from other plugins
+  </Card>
+  <Card title="Data Sharing" icon="database" href="/ipc/data-sharing">
+    Learn how to efficiently share data between plugins
+  </Card>
+</CardGroup>

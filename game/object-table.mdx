@@ -1,0 +1,591 @@
+---
+title: Object Table
+description: Access and enumerate game objects in the current zone
+---
+
+The `IObjectTable` service provides access to all currently spawned game objects in the world, including players, NPCs, enemies, and interactive objects.
+
+## Getting Started
+
+Inject the service into your plugin:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using Dalamud.Game.ClientState.Objects.Types;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IObjectTable objectTable;
+
+    public MyPlugin(IObjectTable objectTable)
+    {
+        this.objectTable = objectTable;
+    }
+
+    public void EnumerateObjects()
+    {
+        foreach (var obj in objectTable)
+        {
+            // Process each game object
+        }
+    }
+}
+```
+
+## Properties
+
+### Address
+
+Gets the address of the object table in memory.
+
+```csharp
+nint Address { get; }
+```
+
+### Length
+
+Gets the length of the object table.
+
+```csharp
+int Length { get; }
+```
+
+**Example:**
+
+```csharp
+chatGui.Print($"Total object slots: {objectTable.Length}");
+```
+
+### LocalPlayer
+
+Gets the local player character, if one is present.
+
+```csharp
+IPlayerCharacter? LocalPlayer { get; }
+```
+
+**Example:**
+
+```csharp
+var player = objectTable.LocalPlayer;
+if (player != null)
+{
+    chatGui.Print($"Player: {player.Name}");
+    chatGui.Print($"Level: {player.Level}");
+    chatGui.Print($"HP: {player.CurrentHp}/{player.MaxHp}");
+}
+```
+
+## Indexed Access
+
+Get an object at the specified spawn index.
+
+```csharp
+IGameObject? this[int index] { get; }
+```
+
+<ParamField path="index" type="int" required>
+  Spawn index (0 to Length - 1)
+</ParamField>
+
+**Example:**
+
+```csharp
+var firstObject = objectTable[0];
+if (firstObject != null)
+{
+    chatGui.Print($"Object at index 0: {firstObject.Name}");
+}
+```
+
+## Filtered Enumerables
+
+### PlayerObjects
+
+Gets an enumerator for accessing player objects. This will only contain BattleChara objects. Does not contain any mounts, minions, or accessories.
+
+```csharp
+IEnumerable<IBattleChara> PlayerObjects { get; }
+```
+
+**Example:**
+
+```csharp
+foreach (var player in objectTable.PlayerObjects)
+{
+    chatGui.Print($"Player: {player.Name}, Level: {player.Level}");
+}
+```
+
+### CharacterManagerObjects
+
+Gets an enumerator for accessing character manager objects. Contains all objects in indexes [0, 199]. Includes mounts, minions, accessories, and players.
+
+```csharp
+IEnumerable<IGameObject> CharacterManagerObjects { get; }
+```
+
+### ClientObjects
+
+Gets an enumerator for accessing client objects. Contains all objects in indexes [200, 448].
+
+```csharp
+IEnumerable<IGameObject> ClientObjects { get; }
+```
+
+### EventObjects
+
+Gets an enumerator for accessing event objects. Contains all objects in indexes [449, 488].
+
+```csharp
+IEnumerable<IGameObject> EventObjects { get; }
+```
+
+### StandObjects
+
+Gets an enumerator for accessing stand objects. Contains all objects in indexes [489, 628].
+
+```csharp
+IEnumerable<IGameObject> StandObjects { get; }
+```
+
+### ReactionEventObjects
+
+Gets an enumerator for accessing reaction event objects. Contains all objects in indexes [629, 728].
+
+```csharp
+IEnumerable<IGameObject> ReactionEventObjects { get; }
+```
+
+## Methods
+
+### SearchById
+
+Search for a game object by their Object ID.
+
+```csharp
+IGameObject? SearchById(ulong gameObjectId)
+```
+
+<ParamField path="gameObjectId" type="ulong" required>
+  Object ID to find
+</ParamField>
+
+**Returns:** A game object or null.
+
+**Example:**
+
+```csharp
+var obj = objectTable.SearchById(0xE0000000);
+if (obj != null)
+{
+    chatGui.Print($"Found: {obj.Name}");
+}
+```
+
+### SearchByEntityId
+
+Search for a game object by the Entity ID.
+
+```csharp
+IGameObject? SearchByEntityId(uint entityId)
+```
+
+<ParamField path="entityId" type="uint" required>
+  Entity ID to find
+</ParamField>
+
+**Returns:** A game object or null.
+
+**Example:**
+
+```csharp
+var obj = objectTable.SearchByEntityId(0x10001234);
+if (obj != null)
+{
+    chatGui.Print($"Found: {obj.Name} at {obj.Position}");
+}
+```
+
+### GetObjectAddress
+
+Gets the address of the game object at the specified index of the object table.
+
+```csharp
+nint GetObjectAddress(int index)
+```
+
+<ParamField path="index" type="int" required>
+  The index of the object
+</ParamField>
+
+**Returns:** The memory address of the object.
+
+**Example:**
+
+```csharp
+var address = objectTable.GetObjectAddress(0);
+if (address != nint.Zero)
+{
+    // Use address for advanced operations
+}
+```
+
+### CreateObjectReference
+
+Create a reference to an FFXIV game object.
+
+```csharp
+IGameObject? CreateObjectReference(nint address)
+```
+
+<ParamField path="address" type="nint" required>
+  The address of the object in memory
+</ParamField>
+
+**Returns:** GameObject object or inheritor containing the requested data.
+
+**Example:**
+
+```csharp
+var address = objectTable.GetObjectAddress(5);
+if (address != nint.Zero)
+{
+    var obj = objectTable.CreateObjectReference(address);
+    if (obj != null)
+    {
+        chatGui.Print($"Object: {obj.Name}");
+    }
+}
+```
+
+## Common Use Cases
+
+### Finding Nearby Objects
+
+```csharp
+public List<IGameObject> GetNearbyObjects(float maxDistance)
+{
+    var player = objectTable.LocalPlayer;
+    if (player == null)
+        return new List<IGameObject>();
+    
+    var nearby = new List<IGameObject>();
+    
+    foreach (var obj in objectTable)
+    {
+        if (obj.GameObjectId == player.GameObjectId)
+            continue;
+        
+        var distance = Vector3.Distance(player.Position, obj.Position);
+        if (distance <= maxDistance)
+        {
+            nearby.Add(obj);
+        }
+    }
+    
+    return nearby;
+}
+```
+
+### Finding Specific Object Types
+
+```csharp
+public void FindEnemies()
+{
+    var enemies = objectTable
+        .Where(obj => obj is IBattleChara battleChara 
+            && battleChara.StatusFlags.HasFlag(StatusFlags.Hostile))
+        .Cast<IBattleChara>()
+        .ToList();
+    
+    chatGui.Print($"Found {enemies.Count} enemies");
+    
+    foreach (var enemy in enemies)
+    {
+        chatGui.Print($"  {enemy.Name} - HP: {enemy.CurrentHp}/{enemy.MaxHp}");
+    }
+}
+
+public void FindInteractableObjects()
+{
+    var interactables = objectTable
+        .Where(obj => obj.ObjectKind == ObjectKind.EventObj)
+        .ToList();
+    
+    foreach (var obj in interactables)
+    {
+        chatGui.Print($"Interactable: {obj.Name} at {obj.Position}");
+    }
+}
+```
+
+### Player Roster
+
+```csharp
+public void ShowNearbyPlayers()
+{
+    var player = objectTable.LocalPlayer;
+    if (player == null)
+        return;
+    
+    chatGui.Print("Nearby players:", "PlayerList", 575);
+    
+    foreach (var otherPlayer in objectTable.PlayerObjects)
+    {
+        if (otherPlayer.GameObjectId == player.GameObjectId)
+            continue;
+        
+        var distance = Vector3.Distance(player.Position, otherPlayer.Position);
+        var jobName = GetJobName(otherPlayer.ClassJob.Id);
+        
+        chatGui.Print($"  {otherPlayer.Name} - {jobName} Lv.{otherPlayer.Level} ({distance:F1}y)");
+    }
+}
+```
+
+### Object Monitoring
+
+```csharp
+private HashSet<ulong> trackedObjectIds = new();
+
+private void OnFrameworkUpdate(IFramework fw)
+{
+    var currentObjects = objectTable
+        .Select(obj => obj.GameObjectId)
+        .ToHashSet();
+    
+    // Detect new objects
+    foreach (var id in currentObjects)
+    {
+        if (!trackedObjectIds.Contains(id))
+        {
+            var obj = objectTable.SearchById(id);
+            if (obj != null)
+            {
+                OnObjectSpawned(obj);
+            }
+        }
+    }
+    
+    // Detect removed objects
+    foreach (var id in trackedObjectIds)
+    {
+        if (!currentObjects.Contains(id))
+        {
+            OnObjectDespawned(id);
+        }
+    }
+    
+    trackedObjectIds = currentObjects;
+}
+
+private void OnObjectSpawned(IGameObject obj)
+{
+    chatGui.Print($"Object spawned: {obj.Name}");
+}
+
+private void OnObjectDespawned(ulong objectId)
+{
+    chatGui.Print($"Object despawned: {objectId:X}");
+}
+```
+
+### Finding Quest NPCs
+
+```csharp
+public IGameObject? FindQuestNpc(uint npcId)
+{
+    foreach (var obj in objectTable)
+    {
+        if (obj.ObjectKind == ObjectKind.EventNpc)
+        {
+            if (obj.DataId == npcId)
+            {
+                return obj;
+            }
+        }
+    }
+    
+    return null;
+}
+
+public void ShowQuestNpcLocation(uint npcId)
+{
+    var npc = FindQuestNpc(npcId);
+    if (npc != null)
+    {
+        var player = objectTable.LocalPlayer;
+        if (player != null)
+        {
+            var distance = Vector3.Distance(player.Position, npc.Position);
+            chatGui.Print($"Quest NPC found: {npc.Name}");
+            chatGui.Print($"Distance: {distance:F1}y");
+            chatGui.Print($"Position: {npc.Position}");
+        }
+    }
+    else
+    {
+        chatGui.Print("Quest NPC not found in current zone");
+    }
+}
+```
+
+### Filtering by Distance
+
+```csharp
+public IEnumerable<IGameObject> GetObjectsInRadius(
+    Vector3 center,
+    float radius,
+    ObjectKind? kindFilter = null)
+{
+    foreach (var obj in objectTable)
+    {
+        if (kindFilter.HasValue && obj.ObjectKind != kindFilter.Value)
+            continue;
+        
+        var distance = Vector3.Distance(center, obj.Position);
+        if (distance <= radius)
+        {
+            yield return obj;
+        }
+    }
+}
+
+public void ShowEnemiesInRange()
+{
+    var player = objectTable.LocalPlayer;
+    if (player == null)
+        return;
+    
+    var nearbyEnemies = GetObjectsInRadius(player.Position, 30f, ObjectKind.BattleNpc)
+        .OfType<IBattleChara>()
+        .Where(bc => bc.StatusFlags.HasFlag(StatusFlags.Hostile));
+    
+    foreach (var enemy in nearbyEnemies)
+    {
+        chatGui.Print($"Enemy: {enemy.Name} ({enemy.CurrentHp}/{enemy.MaxHp} HP)");
+    }
+}
+```
+
+### Party Member Tracking
+
+```csharp
+public List<IPlayerCharacter> GetPartyMembers()
+{
+    var partyMembers = new List<IPlayerCharacter>();
+    
+    foreach (var player in objectTable.PlayerObjects)
+    {
+        if (player is IPlayerCharacter pc)
+        {
+            // Check if in party (simplified check)
+            if (IsInMyParty(pc))
+            {
+                partyMembers.Add(pc);
+            }
+        }
+    }
+    
+    return partyMembers;
+}
+
+public void ShowPartyStatus()
+{
+    var party = GetPartyMembers();
+    
+    chatGui.Print("Party Status:", "Party", 575);
+    foreach (var member in party)
+    {
+        var hpPercent = (float)member.CurrentHp / member.MaxHp * 100;
+        var mpPercent = (float)member.CurrentMp / member.MaxMp * 100;
+        
+        chatGui.Print($"  {member.Name}: {hpPercent:F0}% HP, {mpPercent:F0}% MP");
+    }
+}
+```
+
+### Object Statistics
+
+```csharp
+public void ShowObjectStatistics()
+{
+    var stats = new Dictionary<ObjectKind, int>();
+    var totalObjects = 0;
+    
+    foreach (var obj in objectTable)
+    {
+        totalObjects++;
+        
+        if (!stats.ContainsKey(obj.ObjectKind))
+            stats[obj.ObjectKind] = 0;
+        
+        stats[obj.ObjectKind]++;
+    }
+    
+    chatGui.Print("Object Table Statistics:", "Stats", 575);
+    chatGui.Print($"Total objects: {totalObjects}/{objectTable.Length}");
+    
+    foreach (var (kind, count) in stats.OrderByDescending(x => x.Value))
+    {
+        chatGui.Print($"  {kind}: {count}");
+    }
+}
+```
+
+### Advanced Filtering
+
+```csharp
+public class ObjectFilter
+{
+    public ObjectKind? Kind { get; set; }
+    public float? MaxDistance { get; set; }
+    public Vector3? Center { get; set; }
+    public Func<IGameObject, bool>? CustomPredicate { get; set; }
+}
+
+public IEnumerable<IGameObject> FindObjects(ObjectFilter filter)
+{
+    var center = filter.Center ?? objectTable.LocalPlayer?.Position ?? Vector3.Zero;
+    
+    foreach (var obj in objectTable)
+    {
+        if (filter.Kind.HasValue && obj.ObjectKind != filter.Kind.Value)
+            continue;
+        
+        if (filter.MaxDistance.HasValue)
+        {
+            var distance = Vector3.Distance(center, obj.Position);
+            if (distance > filter.MaxDistance.Value)
+                continue;
+        }
+        
+        if (filter.CustomPredicate != null && !filter.CustomPredicate(obj))
+            continue;
+        
+        yield return obj;
+    }
+}
+
+// Usage
+var enemies = FindObjects(new ObjectFilter
+{
+    Kind = ObjectKind.BattleNpc,
+    MaxDistance = 50f,
+    CustomPredicate = obj => obj is IBattleChara bc && bc.CurrentHp > 0
+});
+```
+
+<Note>
+  The object table is a snapshot of the current game state. Objects may become invalid between frames.
+</Note>
+
+<Note>
+  Not all indices in the object table contain valid objects. Always check for null before accessing object properties.
+</Note>
+
+<Warning>
+  Object references can become stale when objects are removed from the world. Always validate objects before use.
+</Warning>

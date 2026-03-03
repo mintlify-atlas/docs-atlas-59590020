@@ -1,0 +1,347 @@
+---
+title: IExposedPlugin
+description: Interface representing an installed plugin exposed to other plugins
+---
+
+## Overview
+
+`IExposedPlugin` represents an installed plugin as exposed to other plugins. It provides read-only access to plugin metadata, state information, and UI operations. This interface is used when accessing the list of installed plugins through `IDalamudPluginInterface.InstalledPlugins`.
+
+## Interface Definition
+
+```csharp
+public interface IExposedPlugin
+{
+    // Properties
+    string Name { get; }
+    string InternalName { get; }
+    bool IsLoaded { get; }
+    bool IsOutdated { get; }
+    bool IsTesting { get; }
+    bool IsOrphaned { get; }
+    bool IsDecommissioned { get; }
+    bool IsBanned { get; }
+    bool IsDev { get; }
+    bool IsThirdParty { get; }
+    ILocalPluginManifest Manifest { get; }
+    Version Version { get; }
+    bool HasMainUi { get; }
+    bool HasConfigUi { get; }
+    
+    // Methods
+    void OpenMainUi();
+    void OpenConfigUi();
+}
+```
+
+## Properties
+
+### Basic Information
+
+<ResponseField name="Name" type="string">
+  Gets the display name of the plugin.
+  
+  ```csharp
+  string Name { get; }
+  ```
+  
+  This is the user-friendly name shown in the plugin installer and plugin list.
+</ResponseField>
+
+<ResponseField name="InternalName" type="string">
+  Gets the internal name of the plugin.
+  
+  ```csharp
+  string InternalName { get; }
+  ```
+  
+  This is the unique identifier used internally by Dalamud to identify the plugin.
+</ResponseField>
+
+<ResponseField name="Version" type="Version">
+  Gets the version of the plugin.
+  
+  ```csharp
+  Version Version { get; }
+  ```
+  
+  This represents the current installed version of the plugin.
+</ResponseField>
+
+<ResponseField name="Manifest" type="ILocalPluginManifest">
+  Gets the plugin manifest containing metadata.
+  
+  ```csharp
+  ILocalPluginManifest Manifest { get; }
+  ```
+  
+  The manifest contains additional metadata such as description, author, and other plugin information.
+</ResponseField>
+
+### State Flags
+
+<ResponseField name="IsLoaded" type="bool">
+  Gets whether the plugin is currently loaded.
+  
+  ```csharp
+  bool IsLoaded { get; }
+  ```
+  
+  A plugin can be installed but not loaded if it's disabled or encountered an error.
+</ResponseField>
+
+<ResponseField name="IsOutdated" type="bool">
+  Gets whether this plugin's API level is out of date.
+  
+  ```csharp
+  bool IsOutdated { get; }
+  ```
+  
+  Outdated plugins may not function correctly with the current version of Dalamud.
+</ResponseField>
+
+<ResponseField name="IsTesting" type="bool">
+  Gets whether the plugin is marked for testing use only.
+  
+  ```csharp
+  bool IsTesting { get; }
+  ```
+  
+  Testing plugins are pre-release versions that users can opt into.
+</ResponseField>
+
+<ResponseField name="IsOrphaned" type="bool">
+  Gets whether this plugin is orphaned (belongs to a repository that still exists, but the plugin is no longer maintained).
+  
+  ```csharp
+  bool IsOrphaned { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="IsDecommissioned" type="bool">
+  Gets whether this plugin is decommissioned (repository still exists, but plugin no longer does).
+  
+  ```csharp
+  bool IsDecommissioned { get; }
+  ```
+  
+  Decommissioned plugins are no longer available for installation but may still be installed on some systems.
+</ResponseField>
+
+<ResponseField name="IsBanned" type="bool">
+  Gets whether this plugin has been banned.
+  
+  ```csharp
+  bool IsBanned { get; }
+  ```
+  
+  Banned plugins have been blocked from loading due to policy violations or security concerns.
+</ResponseField>
+
+<ResponseField name="IsDev" type="bool">
+  Gets whether this is a development plugin.
+  
+  ```csharp
+  bool IsDev { get; }
+  ```
+  
+  Development plugins are loaded from local directories rather than the plugin repository.
+</ResponseField>
+
+<ResponseField name="IsThirdParty" type="bool">
+  Gets whether this plugin was installed from a third-party repository.
+  
+  ```csharp
+  bool IsThirdParty { get; }
+  ```
+  
+  Third-party plugins come from custom repositories rather than the official Dalamud repository.
+</ResponseField>
+
+### UI Capabilities
+
+<ResponseField name="HasMainUi" type="bool">
+  Gets whether the plugin has a main UI window.
+  
+  ```csharp
+  bool HasMainUi { get; }
+  ```
+  
+  If `true`, the plugin provides a main UI that can be opened via `OpenMainUi()`.
+</ResponseField>
+
+<ResponseField name="HasConfigUi" type="bool">
+  Gets whether the plugin has a configuration UI window.
+  
+  ```csharp
+  bool HasConfigUi { get; }
+  ```
+  
+  If `true`, the plugin provides a configuration UI that can be opened via `OpenConfigUi()`.
+</ResponseField>
+
+## Methods
+
+<ResponseField name="OpenMainUi" type="void">
+  Opens the main UI of the plugin.
+  
+  ```csharp
+  void OpenMainUi()
+  ```
+  
+  **Throws:** `InvalidOperationException` if `HasMainUi` is `false`
+  
+  Always check `HasMainUi` before calling this method.
+</ResponseField>
+
+<ResponseField name="OpenConfigUi" type="void">
+  Opens the configuration UI of the plugin.
+  
+  ```csharp
+  void OpenConfigUi()
+  ```
+  
+  **Throws:** `InvalidOperationException` if `HasConfigUi` is `false`
+  
+  Always check `HasConfigUi` before calling this method.
+</ResponseField>
+
+## Usage Examples
+
+### Listing All Installed Plugins
+
+```csharp
+using Dalamud.Plugin;
+
+public class MyPlugin : IDalamudPlugin
+{
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        foreach (var plugin in pluginInterface.InstalledPlugins)
+        {
+            Console.WriteLine($"Plugin: {plugin.Name} v{plugin.Version}");
+            Console.WriteLine($"  Loaded: {plugin.IsLoaded}");
+            Console.WriteLine($"  Internal Name: {plugin.InternalName}");
+        }
+    }
+
+    public void Dispose() { }
+}
+```
+
+### Finding a Specific Plugin
+
+```csharp
+public bool IsPluginInstalled(IDalamudPluginInterface pluginInterface, string internalName)
+{
+    return pluginInterface.InstalledPlugins
+        .Any(p => p.InternalName == internalName && p.IsLoaded);
+}
+
+public IExposedPlugin? GetPlugin(IDalamudPluginInterface pluginInterface, string internalName)
+{
+    return pluginInterface.InstalledPlugins
+        .FirstOrDefault(p => p.InternalName == internalName);
+}
+```
+
+### Opening Another Plugin's UI
+
+```csharp
+public void OpenPluginConfig(IDalamudPluginInterface pluginInterface, string internalName)
+{
+    var plugin = pluginInterface.InstalledPlugins
+        .FirstOrDefault(p => p.InternalName == internalName);
+    
+    if (plugin == null)
+    {
+        // Plugin not found
+        return;
+    }
+    
+    if (!plugin.IsLoaded)
+    {
+        // Plugin is installed but not loaded
+        return;
+    }
+    
+    if (plugin.HasConfigUi)
+    {
+        try
+        {
+            plugin.OpenConfigUi();
+        }
+        catch (InvalidOperationException)
+        {
+            // Handle error
+        }
+    }
+}
+```
+
+### Checking Plugin States
+
+```csharp
+public void AnalyzePluginStates(IDalamudPluginInterface pluginInterface)
+{
+    var plugins = pluginInterface.InstalledPlugins;
+    
+    var loadedCount = plugins.Count(p => p.IsLoaded);
+    var outdatedCount = plugins.Count(p => p.IsOutdated);
+    var devCount = plugins.Count(p => p.IsDev);
+    var thirdPartyCount = plugins.Count(p => p.IsThirdParty);
+    
+    Console.WriteLine($"Loaded: {loadedCount}/{plugins.Count()}");
+    Console.WriteLine($"Outdated: {outdatedCount}");
+    Console.WriteLine($"Dev Plugins: {devCount}");
+    Console.WriteLine($"Third Party: {thirdPartyCount}");
+}
+```
+
+### Monitoring Plugin Changes
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private IDalamudPluginInterface pluginInterface;
+
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        this.pluginInterface = pluginInterface;
+        pluginInterface.ActivePluginsChanged += OnPluginsChanged;
+    }
+
+    private void OnPluginsChanged(IActivePluginsChangedEventArgs args)
+    {
+        foreach (var internalName in args.AffectedInternalNames)
+        {
+            var plugin = pluginInterface.InstalledPlugins
+                .FirstOrDefault(p => p.InternalName == internalName);
+            
+            if (plugin != null)
+            {
+                Console.WriteLine($"Plugin {plugin.Name} changed: {args.Kind}");
+                Console.WriteLine($"  Is Loaded: {plugin.IsLoaded}");
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        pluginInterface.ActivePluginsChanged -= OnPluginsChanged;
+    }
+}
+```
+
+## Best Practices
+
+- Always check `HasMainUi` or `HasConfigUi` before calling the respective `Open*Ui()` methods
+- Check `IsLoaded` before attempting to interact with a plugin's UI
+- Handle the `InvalidOperationException` that may be thrown by UI methods
+- Use the `ActivePluginsChanged` event to stay updated on plugin state changes
+- Cache plugin lookups if you need to reference the same plugin multiple times
+
+## Related Types
+
+- [IDalamudPluginInterface](/api/plugin/idalamudplugininterface) - Provides access to `InstalledPlugins` property
+- [IActivePluginsChangedEventArgs](/api/plugin/idalamudplugininterface#activepluginschanged) - Event arguments for plugin list changes

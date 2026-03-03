@@ -1,0 +1,491 @@
+---
+title: 'Signature Scanning'
+description: 'Find game functions and data using memory signatures'
+icon: 'magnifying-glass'
+---
+
+## Overview
+
+Signature scanning (also called pattern scanning or AOB scanning) is the process of finding specific byte patterns in the game's memory. This allows you to locate functions, variables, and data structures even when their addresses change between game updates.
+
+## Understanding Signatures
+
+A signature is a sequence of bytes with wildcards that uniquely identifies a location in memory:
+
+```
+E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 85 C9
+```
+
+- `E8`, `48`, `8B`, etc. are exact byte values that must match
+- `??` (or `**`) represents a wildcard byte that can be anything
+
+## Using ISigScanner
+
+The `ISigScanner` service provides methods for scanning memory:
+
+```csharp
+using Dalamud.Plugin.Services;
+
+public class MyPlugin
+{
+    private readonly ISigScanner sigScanner;
+    
+    public MyPlugin(ISigScanner sigScanner)
+    {
+        this.sigScanner = sigScanner;
+    }
+    
+    public void FindFunction()
+    {
+        var signature = "E8 ?? ?? ?? ?? 48 8B 4C 24 ??";
+        var address = this.sigScanner.ScanText(signature);
+        
+        PluginLog.Info($"Found at: {address:X}");
+    }
+}
+```
+
+## Scan Methods
+
+### ScanText
+
+Scan the executable's `.text` section (where code lives):
+
+```csharp
+public nint FindInText()
+{
+    try
+    {
+        return this.sigScanner.ScanText("E8 ?? ?? ?? ?? 48 8B");
+    }
+    catch (KeyNotFoundException)
+    {
+        PluginLog.Error("Signature not found");
+        return nint.Zero;
+    }
+}
+```
+
+With error handling:
+
+```csharp
+public bool TryFindInText(out nint address)
+{
+    return this.sigScanner.TryScanText(
+        "E8 ?? ?? ?? ?? 48 8B",
+        out address
+    );
+}
+```
+
+### ScanData
+
+Scan the `.data` section (for static variables):
+
+```csharp
+public nint FindStaticData()
+{
+    return this.sigScanner.ScanData("48 8D 0D ?? ?? ?? ??");
+}
+
+public bool TryFindStaticData(out nint address)
+{
+    return this.sigScanner.TryScanData(
+        "48 8D 0D ?? ?? ?? ??",
+        out address
+    );
+}
+```
+
+### ScanModule
+
+Scan the entire module:
+
+```csharp
+public nint ScanEverywhere()
+{
+    return this.sigScanner.ScanModule("90 90 90 90");
+}
+
+public bool TryScanEverywhere(out nint address)
+{
+    return this.sigScanner.TryScanModule("90 90 90 90", out address);
+}
+```
+
+### ScanAllText
+
+Find all occurrences of a pattern:
+
+```csharp
+public void FindAllMatches()
+{
+    var addresses = this.sigScanner.ScanAllText("E8 ?? ?? ?? ??");
+    
+    PluginLog.Info($"Found {addresses.Length} matches");
+    foreach (var addr in addresses)
+    {
+        PluginLog.Info($"  - {addr:X}");
+    }
+}
+```
+
+With cancellation support:
+
+```csharp
+using System.Threading;
+
+public void FindAllWithCancel(CancellationToken ct)
+{
+    var matches = this.sigScanner.ScanAllText(
+        "E8 ?? ?? ?? ??",
+        ct
+    );
+    
+    foreach (var addr in matches)
+    {
+        if (ct.IsCancellationRequested) break;
+        ProcessAddress(addr);
+    }
+}
+```
+
+## Resolving Addresses
+
+### Static Addresses
+
+For instructions that reference static data (like `lea rcx, [rip+offset]`):
+
+```csharp
+public nint GetStaticAddress()
+{
+    var signature = "48 8D 0D ?? ?? ?? ??";
+    var address = this.sigScanner.GetStaticAddressFromSig(signature);
+    
+    PluginLog.Info($"Static data at: {address:X}");
+    return address;
+}
+```
+
+With offset:
+
+```csharp
+public nint GetStaticWithOffset()
+{
+    var signature = "E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ??";
+    
+    // Skip the call instruction (5 bytes) to get to the LEA
+    var address = this.sigScanner.GetStaticAddressFromSig(signature, offset: 5);
+    return address;
+}
+```
+
+With error handling:
+
+```csharp
+public bool TryGetStaticAddress(out nint address)
+{
+    var signature = "48 8D 0D ?? ?? ?? ??";
+    return this.sigScanner.TryGetStaticAddressFromSig(
+        signature,
+        out address
+    );
+}
+```
+
+### Relative Addresses
+
+Resolve relative offsets manually:
+
+```csharp
+public nint ResolveRelative()
+{
+    // Find a CALL instruction: E8 [offset]
+    var callSite = this.sigScanner.ScanText("E8 ?? ?? ?? ??");
+    
+    // Read the relative offset (4 bytes after E8)
+    var relOffset = Marshal.ReadInt32(callSite + 1);
+    
+    // Calculate absolute address
+    // Address after CALL = callSite + 5 (instruction length)
+    var targetAddress = this.sigScanner.ResolveRelativeAddress(
+        callSite + 5,
+        relOffset
+    );
+    
+    return targetAddress;
+}
+```
+
+## Using Signature Attributes
+
+The recommended approach for managing signatures:
+
+```csharp
+using Dalamud.Utility.Signatures;
+
+public class GameFunctions
+{
+    // Simple pointer
+    [Signature("48 8D 0D ?? ?? ?? ??", ScanType = ScanType.StaticAddress)]
+    private readonly nint playerDataPtr;
+    
+    // Function pointer as delegate
+    private delegate nint GetPlayerNameDelegate(nint player);
+    
+    [Signature("E8 ?? ?? ?? ?? 48 85 C0 74 ??")]
+    private readonly GetPlayerNameDelegate? getPlayerName;
+    
+    // Function pointer as nint
+    [Signature("E8 ?? ?? ?? ?? EB ?? 48 8B")]
+    private readonly nint updatePositionAddress;
+    
+    public void Initialize(IGameInteropProvider interop)
+    {
+        // Automatically resolves all [Signature] fields
+        interop.InitializeFromAttributes(this);
+        
+        // Now you can use them
+        if (this.getPlayerName != null)
+        {
+            var name = this.getPlayerName(this.playerDataPtr);
+        }
+    }
+}
+```
+
+### Signature Attribute Options
+
+```csharp
+public class SignatureExamples
+{
+    // Custom scan type
+    [Signature("48 8B 05 ?? ?? ?? ??", ScanType = ScanType.StaticAddress)]
+    private readonly nint staticData;
+    
+    // With offset
+    [Signature("E8 ?? ?? ?? ?? 48 8D 0D", Offset = 5)]
+    private readonly nint addressWithOffset;
+    
+    // Fallible signature (won't throw on error)
+    [Signature(
+        "E8 ?? ?? ?? ?? 48 8B",
+        Fallibility = Fallibility.Fallible
+    )]
+    private readonly nint? optionalAddress;
+    
+    // For hooks with explicit detour name
+    [Signature(
+        "40 53 48 83 EC 20 48 8B D9",
+        DetourName = nameof(MyDetour)
+    )]
+    private Hook<MyDelegate>? myHook;
+    
+    private void MyDetour(nint param)
+    {
+        // Detour implementation
+    }
+}
+```
+
+## Signature Best Practices
+
+### Creating Good Signatures
+
+1. **Make them unique**: Should match only one location
+2. **Make them stable**: Avoid bytes that change frequently
+3. **Balance length**: Long enough to be unique, short enough to be flexible
+4. **Use wildcards wisely**: For offsets and addresses, not for opcodes
+
+```csharp
+// Good signature - specific but flexible
+"E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 85 C9"
+
+// Bad signature - too short, might match multiple locations
+"E8 ?? ?? ??"
+
+// Bad signature - too specific, might break on minor updates
+"E8 A0 B1 C2 D3 48 8B 4C 24 30 48 85 C9"
+```
+
+### IDA-Style Signatures
+
+When the signature points to a CALL or JMP instruction, SigScanner automatically resolves the target:
+
+```csharp
+// This signature points to: E8 [offset]
+// SigScanner will automatically follow the call
+var signature = "E8 ?? ?? ?? ?? 48 8B 4C 24 ??";
+var functionAddress = this.sigScanner.ScanText(signature);
+
+// functionAddress now points to the target function,
+// not the call site!
+```
+
+<Note>
+This automatic resolution only happens for ScanText. The signature must point directly to an E8 (CALL) or E9 (JMP) instruction.
+</Note>
+
+## Scanner Properties
+
+Access scanner information:
+
+```csharp
+public void InspectScanner()
+{
+    PluginLog.Info($"Module: {this.sigScanner.Module.ModuleName}");
+    PluginLog.Info($"Base: {this.sigScanner.Module.BaseAddress:X}");
+    PluginLog.Info($"Is32Bit: {this.sigScanner.Is32BitProcess}");
+    PluginLog.Info($"IsCopy: {this.sigScanner.IsCopy}");
+    
+    // Section information
+    PluginLog.Info($"Text base: {this.sigScanner.TextSectionBase:X}");
+    PluginLog.Info($"Text size: {this.sigScanner.TextSectionSize:X}");
+    PluginLog.Info($"Data base: {this.sigScanner.DataSectionBase:X}");
+    PluginLog.Info($"Data size: {this.sigScanner.DataSectionSize:X}");
+}
+```
+
+## Static Scanning
+
+You can also scan without ISigScanner:
+
+```csharp
+using Dalamud.Game;
+
+public nint StaticScan(nint baseAddress, int size)
+{
+    return SigScanner.Scan(
+        baseAddress,
+        size,
+        "E8 ?? ?? ?? ??"
+    );
+}
+
+public bool TryStaticScan(nint baseAddress, int size, out nint result)
+{
+    return SigScanner.TryScan(
+        baseAddress,
+        size,
+        "E8 ?? ?? ?? ??",
+        out result
+    );
+}
+```
+
+## Performance
+
+### Caching Results
+
+Always cache signature scan results:
+
+```csharp
+public class CachedAddresses
+{
+    private nint? cachedAddress;
+    
+    public nint GetAddress(ISigScanner scanner)
+    {
+        if (this.cachedAddress == null)
+        {
+            this.cachedAddress = scanner.ScanText("E8 ?? ?? ?? ??");
+        }
+        
+        return this.cachedAddress.Value;
+    }
+}
+```
+
+### Scan During Initialization
+
+Perform all scans during plugin initialization:
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly nint importantFunction;
+    
+    public MyPlugin(ISigScanner scanner)
+    {
+        // Scan once during init
+        this.importantFunction = scanner.ScanText("E8 ?? ?? ?? ??");
+    }
+    
+    public void SomeMethod()
+    {
+        // Use cached address
+        CallFunction(this.importantFunction);
+    }
+}
+```
+
+## Troubleshooting
+
+### Signature Not Found
+
+```csharp
+public void HandleMissingSig()
+{
+    try
+    {
+        var addr = this.sigScanner.ScanText("E8 ?? ?? ?? ??");
+    }
+    catch (KeyNotFoundException)
+    {
+        PluginLog.Error("Signature not found - may need updating");
+        
+        // Try alternative signature
+        if (this.sigScanner.TryScanText("E9 ?? ?? ?? ??", out var alt))
+        {
+            PluginLog.Info("Using alternative signature");
+        }
+    }
+}
+```
+
+### Validating Addresses
+
+```csharp
+public bool ValidateAddress(nint address)
+{
+    // Check if in text section
+    if (address < this.sigScanner.TextSectionBase ||
+        address >= this.sigScanner.TextSectionBase + this.sigScanner.TextSectionSize)
+    {
+        PluginLog.Warning($"Address {address:X} outside text section");
+        return false;
+    }
+    
+    return true;
+}
+```
+
+## Finding Signatures
+
+### Using IDA Pro
+
+1. Find the function you want in IDA
+2. Select a few unique instructions
+3. Right-click → "Copy to assembly"
+4. Convert to hex bytes
+5. Replace offsets with `??`
+
+### Using Cheat Engine
+
+1. Attach to game process
+2. Use "Array of Byte" scan
+3. Find unique byte pattern
+4. Convert to signature format
+
+### Using Ghidra
+
+1. Open game executable
+2. Find target function
+3. Note instruction bytes
+4. Create signature with wildcards
+
+## Related Topics
+
+- [Function Hooking](/advanced/hooking) - Using found addresses for hooks
+- [Game Interop Provider](/advanced/game-interop) - Managing signatures and hooks
+- [Memory Operations](/advanced/memory) - Reading data at found addresses

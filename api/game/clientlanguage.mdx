@@ -1,0 +1,90 @@
+---
+title: 'ClientLanguage'
+description: 'Enum describing the language the game loads in'
+---
+
+## Overview
+
+The `ClientLanguage` enum represents the available language settings for the FFXIV game client. This enum is used throughout Dalamud to identify which language version of the game is currently running.
+
+**Namespace:** `Dalamud.Game`
+
+## Enum Values
+
+### Japanese
+
+Indicating a Japanese game client.
+
+**Value:** `0` (default)
+
+```csharp
+ClientLanguage.Japanese
+```
+
+### English
+
+Indicating an English game client.
+
+**Value:** `1`
+
+```csharp
+ClientLanguage.English
+```
+
+### German
+
+Indicating a German game client.
+
+**Value:** `2`
+
+```csharp
+ClientLanguage.German
+```
+
+### French
+
+Indicating a French game client.
+
+**Value:** `3`
+
+```csharp
+ClientLanguage.French
+```
+
+## Usage Example
+
+```csharp
+using Dalamud.Game;
+
+// Get the current client language
+var clientState = Service.Get<IClientState>();
+ClientLanguage currentLanguage = clientState.ClientLanguage;
+
+// Check for specific language
+if (currentLanguage == ClientLanguage.English)
+{
+    // Handle English-specific logic
+}
+
+// Switch based on language
+switch (currentLanguage)
+{
+    case ClientLanguage.Japanese:
+        // Japanese-specific code
+        break;
+    case ClientLanguage.English:
+        // English-specific code
+        break;
+    case ClientLanguage.German:
+        // German-specific code
+        break;
+    case ClientLanguage.French:
+        // French-specific code
+        break;
+}
+```
+
+## Related Types
+
+- `IClientState` - Service that provides access to the current client language
+- `IDataManager` - Service that can retrieve localized game data based on client language

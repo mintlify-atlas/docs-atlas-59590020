@@ -1,0 +1,552 @@
+---
+title: Data Manager
+description: Access game data sheets and resources using Lumina
+---
+
+The `IDataManager` service provides access to the game's data files through Lumina, allowing you to read Excel sheets, game files, and other resources.
+
+## Getting Started
+
+Inject the service into your plugin:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using Lumina.Excel.Sheets;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IDataManager dataManager;
+
+    public MyPlugin(IDataManager dataManager)
+    {
+        this.dataManager = dataManager;
+    }
+
+    public void LoadGameData()
+    {
+        var itemSheet = dataManager.GetExcelSheet<Item>();
+        foreach (var item in itemSheet)
+        {
+            // Process items
+        }
+    }
+}
+```
+
+## Properties
+
+### Language
+
+Gets the current game client language.
+
+```csharp
+ClientLanguage Language { get; }
+```
+
+**Example:**
+
+```csharp
+var language = dataManager.Language;
+switch (language)
+{
+    case ClientLanguage.English:
+        // Load English resources
+        break;
+    case ClientLanguage.Japanese:
+        // Load Japanese resources
+        break;
+}
+```
+
+### GameData
+
+Gets a Lumina object which gives access to any excel/game data.
+
+```csharp
+GameData GameData { get; }
+```
+
+**Example:**
+
+```csharp
+var gameData = dataManager.GameData;
+var repositories = gameData.Repositories;
+```
+
+### Excel
+
+Gets an ExcelModule object which gives access to any of the game's sheet data.
+
+```csharp
+ExcelModule Excel { get; }
+```
+
+### HasModifiedGameDataFiles
+
+Gets a value indicating whether the game data files have been modified by another third-party tool.
+
+```csharp
+bool HasModifiedGameDataFiles { get; }
+```
+
+**Example:**
+
+```csharp
+if (dataManager.HasModifiedGameDataFiles)
+{
+    chatGui.PrintError("Warning: Modified game files detected");
+}
+```
+
+## Methods
+
+### GetExcelSheet
+
+Get an ExcelSheet with the given Excel sheet row type.
+
+```csharp
+ExcelSheet<T> GetExcelSheet<T>(ClientLanguage? language = null, string? name = null)
+    where T : struct, IExcelRow<T>
+```
+
+<ParamField path="T" type="type" required>
+  The excel sheet type to get
+</ParamField>
+
+<ParamField path="language" type="ClientLanguage?">
+  Language of the sheet to get. Leave null to use the default language
+</ParamField>
+
+<ParamField path="name" type="string?">
+  Explicitly provide the name of the sheet to get. Leave null to use T's sheet name
+</ParamField>
+
+**Returns:** The ExcelSheet, giving access to game rows.
+
+**Example:**
+
+```csharp
+// Get items in current language
+var items = dataManager.GetExcelSheet<Item>();
+foreach (var item in items)
+{
+    if (item.Name.ToString().Length > 0)
+    {
+        chatGui.Print($"{item.RowId}: {item.Name}");
+    }
+}
+
+// Get items in specific language
+var itemsJP = dataManager.GetExcelSheet<Item>(ClientLanguage.Japanese);
+var firstItem = itemsJP.GetRow(1);
+chatGui.Print($"Japanese name: {firstItem.Name}");
+```
+
+<Note>
+  If the sheet type has subrows, use `GetSubrowExcelSheet<T>` instead.
+</Note>
+
+### GetSubrowExcelSheet
+
+Get a SubrowExcelSheet with the given Excel sheet row type.
+
+```csharp
+SubrowExcelSheet<T> GetSubrowExcelSheet<T>(ClientLanguage? language = null, string? name = null)
+    where T : struct, IExcelSubrow<T>
+```
+
+<ParamField path="T" type="type" required>
+  The excel sheet type to get
+</ParamField>
+
+<ParamField path="language" type="ClientLanguage?">
+  Language of the sheet to get. Leave null to use the default language
+</ParamField>
+
+<ParamField path="name" type="string?">
+  Explicitly provide the name of the sheet to get. Leave null to use T's sheet name
+</ParamField>
+
+**Returns:** The SubrowExcelSheet, giving access to game rows with subrows.
+
+**Example:**
+
+```csharp
+var questSheet = dataManager.GetSubrowExcelSheet<Quest>();
+foreach (var quest in questSheet)
+{
+    chatGui.Print($"Quest: {quest.Name}");
+}
+```
+
+### GetFile
+
+Get a FileResource with the given path.
+
+```csharp
+FileResource? GetFile(string path)
+```
+
+<ParamField path="path" type="string" required>
+  The path inside of the game files
+</ParamField>
+
+**Returns:** The FileResource of the file.
+
+**Example:**
+
+```csharp
+var file = dataManager.GetFile("exd/item.exh");
+if (file != null)
+{
+    // Process file data
+}
+```
+
+### GetFile\<T\>
+
+Get a FileResource with the given path, of the given type.
+
+```csharp
+T? GetFile<T>(string path) where T : FileResource
+```
+
+<ParamField path="T" type="type" required>
+  The type of resource
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  The path inside of the game files
+</ParamField>
+
+**Returns:** The FileResource of the file.
+
+**Example:**
+
+```csharp
+var texFile = dataManager.GetFile<TexFile>("ui/icon/000000/000001.tex");
+if (texFile != null)
+{
+    // Process texture
+}
+```
+
+### GetFileAsync
+
+Get a FileResource with the given path, of the given type, asynchronously.
+
+```csharp
+Task<T> GetFileAsync<T>(string path, CancellationToken cancellationToken)
+    where T : FileResource
+```
+
+<ParamField path="T" type="type" required>
+  The type of resource
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  The path inside of the game files
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken" required>
+  Cancellation token
+</ParamField>
+
+**Returns:** A Task containing the FileResource of the file on success.
+
+**Example:**
+
+```csharp
+var texFile = await dataManager.GetFileAsync<TexFile>(
+    "ui/icon/000000/000001.tex",
+    cancellationToken);
+```
+
+### FileExists
+
+Check if the file with the given path exists within the game's index files.
+
+```csharp
+bool FileExists(string path)
+```
+
+<ParamField path="path" type="string" required>
+  The path inside of the game files
+</ParamField>
+
+**Returns:** True if the file exists.
+
+**Example:**
+
+```csharp
+if (dataManager.FileExists("ui/icon/000000/000001.tex"))
+{
+    var texFile = dataManager.GetFile<TexFile>("ui/icon/000000/000001.tex");
+}
+```
+
+## Common Use Cases
+
+### Loading Item Data
+
+```csharp
+public void LoadItemData(uint itemId)
+{
+    var itemSheet = dataManager.GetExcelSheet<Item>();
+    var item = itemSheet?.GetRow(itemId);
+    
+    if (item == null)
+    {
+        chatGui.PrintError($"Item {itemId} not found");
+        return;
+    }
+    
+    chatGui.Print($"Item: {item.Name}");
+    chatGui.Print($"Level: {item.LevelItem.ValueNullable?.RowId ?? 0}");
+    chatGui.Print($"Can be HQ: {item.CanBeHq}");
+}
+```
+
+### Multi-Language Support
+
+```csharp
+public Dictionary<ClientLanguage, string> GetItemNameInAllLanguages(uint itemId)
+{
+    var names = new Dictionary<ClientLanguage, string>();
+    
+    foreach (ClientLanguage lang in Enum.GetValues(typeof(ClientLanguage)))
+    {
+        if (lang == ClientLanguage.None)
+            continue;
+        
+        var items = dataManager.GetExcelSheet<Item>(lang);
+        var item = items?.GetRow(itemId);
+        
+        if (item != null)
+        {
+            names[lang] = item.Name.ToString();
+        }
+    }
+    
+    return names;
+}
+```
+
+### Building Item Database
+
+```csharp
+public class ItemInfo
+{
+    public uint Id { get; set; }
+    public string Name { get; set; }
+    public uint IconId { get; set; }
+    public bool CanBeHq { get; set; }
+}
+
+public List<ItemInfo> BuildItemDatabase()
+{
+    var database = new List<ItemInfo>();
+    var items = dataManager.GetExcelSheet<Item>();
+    
+    if (items == null)
+        return database;
+    
+    foreach (var item in items)
+    {
+        // Skip invalid items
+        if (item.Name.ToString().Length == 0)
+            continue;
+        
+        database.Add(new ItemInfo
+        {
+            Id = item.RowId,
+            Name = item.Name.ToString(),
+            IconId = item.Icon,
+            CanBeHq = item.CanBeHq
+        });
+    }
+    
+    return database;
+}
+```
+
+### Territory Information
+
+```csharp
+public void ShowCurrentTerritoryInfo()
+{
+    var territoryId = clientState.TerritoryType;
+    var territories = dataManager.GetExcelSheet<TerritoryType>();
+    var territory = territories?.GetRow(territoryId);
+    
+    if (territory == null)
+    {
+        chatGui.PrintError("Territory data not found");
+        return;
+    }
+    
+    var placeName = territory.PlaceName.ValueNullable?.Name.ToString() ?? "Unknown";
+    var region = territory.PlaceNameRegion.ValueNullable?.Name.ToString() ?? "Unknown";
+    var zone = territory.PlaceNameZone.ValueNullable?.Name.ToString() ?? "Unknown";
+    
+    chatGui.Print($"Territory: {placeName}");
+    chatGui.Print($"Region: {region}");
+    chatGui.Print($"Zone: {zone}");
+}
+```
+
+### Quest Data Access
+
+```csharp
+public void LoadQuestInfo(uint questId)
+{
+    var quests = dataManager.GetSubrowExcelSheet<Quest>();
+    var quest = quests?.GetRow(questId);
+    
+    if (quest == null)
+    {
+        chatGui.PrintError("Quest not found");
+        return;
+    }
+    
+    chatGui.Print($"Quest: {quest.Name}");
+    chatGui.Print($"Level: {quest.ClassJobLevel0}");
+    
+    // Access quest prerequisites
+    if (quest.PreviousQuest0.RowId != 0)
+    {
+        var prevQuest = quests?.GetRow(quest.PreviousQuest0.RowId);
+        if (prevQuest != null)
+        {
+            chatGui.Print($"Requires: {prevQuest.Name}");
+        }
+    }
+}
+```
+
+### ClassJob Information
+
+```csharp
+public void ShowClassJobInfo(uint classJobId)
+{
+    var classJobs = dataManager.GetExcelSheet<ClassJob>();
+    var classJob = classJobs?.GetRow(classJobId);
+    
+    if (classJob == null)
+    {
+        chatGui.PrintError("ClassJob not found");
+        return;
+    }
+    
+    chatGui.Print($"Job: {classJob.Name}");
+    chatGui.Print($"Abbreviation: {classJob.Abbreviation}");
+    chatGui.Print($"Role: {classJob.Role}");
+    
+    // Get job icon
+    var iconPath = $"ui/icon/{classJob.Icon:D6}.tex";
+    if (dataManager.FileExists(iconPath))
+    {
+        // Load and display icon
+    }
+}
+```
+
+### Action Data
+
+```csharp
+public void LoadActionInfo(uint actionId)
+{
+    var actions = dataManager.GetExcelSheet<Action>();
+    var action = actions?.GetRow(actionId);
+    
+    if (action == null)
+    {
+        chatGui.PrintError("Action not found");
+        return;
+    }
+    
+    chatGui.Print($"Action: {action.Name}");
+    chatGui.Print($"Range: {action.Range}");
+    chatGui.Print($"Cast Time: {action.Cast100ms / 10f}s");
+    chatGui.Print($"Recast Time: {action.Recast100ms / 10f}s");
+}
+```
+
+### Custom Data Cache
+
+```csharp
+public class GameDataCache
+{
+    private readonly Dictionary<uint, Item> itemCache = new();
+    private readonly IDataManager dataManager;
+    
+    public GameDataCache(IDataManager dataManager)
+    {
+        this.dataManager = dataManager;
+        BuildCache();
+    }
+    
+    private void BuildCache()
+    {
+        var items = dataManager.GetExcelSheet<Item>();
+        if (items == null)
+            return;
+        
+        foreach (var item in items)
+        {
+            if (item.Name.ToString().Length > 0)
+            {
+                itemCache[item.RowId] = item;
+            }
+        }
+    }
+    
+    public Item? GetItem(uint itemId)
+    {
+        itemCache.TryGetValue(itemId, out var item);
+        return item;
+    }
+    
+    public IEnumerable<Item> SearchItems(string query)
+    {
+        return itemCache.Values
+            .Where(i => i.Name.ToString()
+            .Contains(query, StringComparison.OrdinalIgnoreCase));
+    }
+}
+```
+
+### Loading Texture Files
+
+```csharp
+public async Task<IDalamudTextureWrap?> LoadIconAsync(uint iconId)
+{
+    var iconPath = $"ui/icon/{iconId / 1000 * 1000:D6}/{iconId:D6}.tex";
+    
+    if (!dataManager.FileExists(iconPath))
+    {
+        Logger.Warning($"Icon not found: {iconId}");
+        return null;
+    }
+    
+    var texFile = await dataManager.GetFileAsync<TexFile>(iconPath, CancellationToken.None);
+    if (texFile == null)
+        return null;
+    
+    var texture = textureProvider.CreateFromTexFile(texFile);
+    return texture;
+}
+```
+
+<Note>
+  Excel sheets are cached by Lumina. Repeated calls to `GetExcelSheet<T>` for the same type are efficient.
+</Note>
+
+<Warning>
+  Always check for null when accessing sheet rows or subrows. Not all row IDs are valid.
+</Warning>
+
+<Warning>
+  When using `HasModifiedGameDataFiles`, be aware that this only detects certain types of modifications. It should not be relied upon for security purposes.
+</Warning>

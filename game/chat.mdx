@@ -1,0 +1,440 @@
+---
+title: Chat GUI
+description: Send messages to chat and handle incoming chat events
+---
+
+The `IChatGui` service allows you to interact with the game's chat system, including sending messages and handling incoming chat events.
+
+## Getting Started
+
+Inject the service into your plugin:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using Dalamud.Game.Text;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IChatGui chatGui;
+
+    public MyPlugin(IChatGui chatGui)
+    {
+        this.chatGui = chatGui;
+        
+        // Subscribe to chat events
+        this.chatGui.ChatMessage += OnChatMessage;
+    }
+
+    private void OnChatMessage(
+        XivChatType type,
+        int timestamp,
+        ref SeString sender,
+        ref SeString message,
+        ref bool isHandled)
+    {
+        // Process incoming chat messages
+    }
+
+    public void Dispose()
+    {
+        this.chatGui.ChatMessage -= OnChatMessage;
+    }
+}
+```
+
+## Sending Messages
+
+### Print (String)
+
+Queue a chat message. Dalamud will send queued messages on the next framework event.
+
+```csharp
+void Print(string message, string? messageTag = null, ushort? tagColor = null)
+```
+
+<ParamField path="message" type="string" required>
+  The message to send
+</ParamField>
+
+<ParamField path="messageTag" type="string">
+  String to prepend message with "[messageTag] "
+</ParamField>
+
+<ParamField path="tagColor" type="ushort">
+  Color to display the message tag with
+</ParamField>
+
+**Example:**
+
+```csharp
+chatGui.Print("Hello, world!");
+chatGui.Print("Plugin message", "MyPlugin", 575);
+```
+
+### Print (SeString)
+
+Queue a chat message with SeString formatting.
+
+```csharp
+void Print(SeString message, string? messageTag = null, ushort? tagColor = null)
+```
+
+**Example:**
+
+```csharp
+var builder = new SeStringBuilder()
+    .AddUiForeground("Colored text", 500)
+    .AddText(" normal text");
+
+chatGui.Print(builder.Build(), "MyPlugin");
+```
+
+### Print (XivChatEntry)
+
+Queue a full chat entry with all properties.
+
+```csharp
+void Print(XivChatEntry chat)
+```
+
+**Example:**
+
+```csharp
+var entry = new XivChatEntry
+{
+    Type = XivChatType.Echo,
+    Message = "Custom message",
+    Name = "System"
+};
+
+chatGui.Print(entry);
+```
+
+### PrintError
+
+Queue an error message. Appears in error chat style.
+
+```csharp
+void PrintError(string message, string? messageTag = null, ushort? tagColor = null)
+void PrintError(SeString message, string? messageTag = null, ushort? tagColor = null)
+```
+
+**Example:**
+
+```csharp
+chatGui.PrintError("Something went wrong!");
+chatGui.PrintError("Failed to load data", "MyPlugin");
+```
+
+## Chat Link Handlers
+
+Create clickable links in chat that trigger custom actions.
+
+### AddChatLinkHandler
+
+Register a chat link handler.
+
+```csharp
+DalamudLinkPayload AddChatLinkHandler(uint commandId, Action<uint, SeString> commandAction)
+```
+
+<ParamField path="commandId" type="uint" required>
+  The ID of the command (unique to your plugin)
+</ParamField>
+
+<ParamField path="commandAction" type="Action<uint, SeString>" required>
+  The action to execute when the link is clicked
+</ParamField>
+
+**Returns:** An `SeString` payload for the link.
+
+**Example:**
+
+```csharp
+var linkPayload = chatGui.AddChatLinkHandler(1, (id, payload) =>
+{
+    chatGui.Print("Link clicked!");
+});
+
+var message = new SeStringBuilder()
+    .AddText("Click ")
+    .Add(linkPayload)
+    .AddUiForeground("[here]", 500)
+    .Add(RawPayload.LinkTerminator)
+    .AddText(" for more info");
+
+chatGui.Print(message.Build());
+```
+
+### RemoveChatLinkHandler
+
+Remove a specific chat link handler or all handlers registered by the plugin.
+
+```csharp
+void RemoveChatLinkHandler(uint commandId)
+void RemoveChatLinkHandler()
+```
+
+**Example:**
+
+```csharp
+// Remove specific handler
+chatGui.RemoveChatLinkHandler(1);
+
+// Remove all handlers (typically in Dispose)
+chatGui.RemoveChatLinkHandler();
+```
+
+### RegisteredLinkHandlers
+
+Gets the dictionary of Dalamud link handlers.
+
+```csharp
+IReadOnlyDictionary<(string PluginName, uint CommandId), Action<uint, SeString>> RegisteredLinkHandlers { get; }
+```
+
+## Events
+
+### ChatMessage
+
+Event that fires when a chat message is sent to chat by the game.
+
+```csharp
+event OnMessageDelegate ChatMessage
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void OnMessageDelegate(
+    XivChatType type,
+    int timestamp,
+    ref SeString sender,
+    ref SeString message,
+    ref bool isHandled)
+```
+
+<ParamField path="type" type="XivChatType">
+  The type of chat
+</ParamField>
+
+<ParamField path="timestamp" type="int">
+  The timestamp of when the message was sent
+</ParamField>
+
+<ParamField path="sender" type="SeString">
+  The sender name (modifiable)
+</ParamField>
+
+<ParamField path="message" type="SeString">
+  The message sent (modifiable)
+</ParamField>
+
+<ParamField path="isHandled" type="bool">
+  Set to true to mark the message as handled
+</ParamField>
+
+**Example:**
+
+```csharp
+chatGui.ChatMessage += (type, timestamp, ref sender, ref message, ref isHandled) =>
+{
+    if (type == XivChatType.Say)
+    {
+        // Process say messages
+        var text = message.TextValue;
+        if (text.Contains("secret"))
+        {
+            message = new SeString(new TextPayload("[REDACTED]"));
+        }
+    }
+};
+```
+
+### CheckMessageHandled
+
+Event that allows you to stop messages from appearing in chat by setting the `isHandled` parameter to true.
+
+```csharp
+event OnCheckMessageHandledDelegate CheckMessageHandled
+```
+
+**Example:**
+
+```csharp
+chatGui.CheckMessageHandled += (type, timestamp, ref sender, ref message, ref isHandled) =>
+{
+    if (message.TextValue.Contains("spam"))
+    {
+        isHandled = true; // Block this message
+    }
+};
+```
+
+### ChatMessageHandled
+
+Event that fires when a chat message is handled by Dalamud or a plugin.
+
+```csharp
+event OnMessageHandledDelegate ChatMessageHandled
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void OnMessageHandledDelegate(
+    XivChatType type,
+    int timestamp,
+    SeString sender,
+    SeString message)
+```
+
+### ChatMessageUnhandled
+
+Event that fires when a chat message is not handled by Dalamud or a plugin.
+
+```csharp
+event OnMessageUnhandledDelegate ChatMessageUnhandled
+```
+
+### LogMessage
+
+Event that fires when a log message (chat message based on entries in the LogMessage sheet) is sent.
+
+```csharp
+event OnLogMessageDelegate LogMessage
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void OnLogMessageDelegate(ILogMessage message)
+```
+
+## Properties
+
+### LastLinkedItemId
+
+Gets the ID of the last linked item.
+
+```csharp
+uint LastLinkedItemId { get; }
+```
+
+### LastLinkedItemFlags
+
+Gets the flags of the last linked item.
+
+```csharp
+byte LastLinkedItemFlags { get; }
+```
+
+## Common Use Cases
+
+### Chat Command Response
+
+```csharp
+private void OnCommand(string command, string args)
+{
+    if (args == "help")
+    {
+        chatGui.Print("Available commands:", "MyPlugin", 575);
+        chatGui.Print("  /myplugin help - Show this help");
+        chatGui.Print("  /myplugin status - Show status");
+    }
+    else if (args == "status")
+    {
+        var message = new SeStringBuilder()
+            .AddUiForeground("[Status]", 500)
+            .AddText(" Everything is working!")
+            .Build();
+        
+        chatGui.Print(message);
+    }
+}
+```
+
+### Filtering Chat Messages
+
+```csharp
+private void Initialize()
+{
+    chatGui.CheckMessageHandled += (type, timestamp, ref sender, ref message, ref isHandled) =>
+    {
+        // Block specific message types
+        if (type == XivChatType.Shout && config.BlockShout)
+        {
+            isHandled = true;
+            return;
+        }
+        
+        // Block messages containing certain words
+        var text = message.TextValue.ToLower();
+        if (config.BlockedWords.Any(word => text.Contains(word)))
+        {
+            isHandled = true;
+        }
+    };
+}
+```
+
+### Chat Logger
+
+```csharp
+private void SetupChatLogger()
+{
+    chatGui.ChatMessage += (type, timestamp, ref sender, ref message, ref isHandled) =>
+    {
+        var logEntry = new ChatLogEntry
+        {
+            Type = type,
+            Timestamp = DateTimeOffset.FromUnixTimeSeconds(timestamp),
+            Sender = sender.TextValue,
+            Message = message.TextValue
+        };
+        
+        SaveToLog(logEntry);
+    };
+}
+```
+
+### Interactive Help System
+
+```csharp
+private void ShowInteractiveHelp()
+{
+    var teleportLink = chatGui.AddChatLinkHandler(1, (id, payload) =>
+    {
+        // Open teleport window
+        OpenTeleportWindow();
+    });
+    
+    var settingsLink = chatGui.AddChatLinkHandler(2, (id, payload) =>
+    {
+        // Open settings
+        OpenSettings();
+    });
+    
+    var message = new SeStringBuilder()
+        .AddText("Click ")
+        .Add(teleportLink)
+        .AddUiForeground("[Teleport]", 500)
+        .Add(RawPayload.LinkTerminator)
+        .AddText(" or ")
+        .Add(settingsLink)
+        .AddUiForeground("[Settings]", 575)
+        .Add(RawPayload.LinkTerminator)
+        .Build();
+    
+    chatGui.Print(message, "MyPlugin");
+}
+```
+
+<Note>
+  Messages sent via `Print` are queued and sent on the next framework event, not immediately.
+</Note>
+
+<Warning>
+  Remember to remove all chat link handlers in your plugin's `Dispose` method to prevent memory leaks.
+</Warning>

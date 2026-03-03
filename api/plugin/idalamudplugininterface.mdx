@@ -1,0 +1,597 @@
+---
+title: IDalamudPluginInterface
+description: Interface providing access to Dalamud services and game interaction functionality
+---
+
+## Overview
+
+`IDalamudPluginInterface` acts as the primary interface for plugins to interact with Dalamud and the game. It provides access to various services, configuration management, IPC, dependency injection, and UI building capabilities.
+
+## Interface Definition
+
+```csharp
+public interface IDalamudPluginInterface : IServiceProvider
+{
+    // Events, properties, and methods
+}
+```
+
+## Events
+
+<ResponseField name="LanguageChanged" type="event LanguageChangedDelegate">
+  Fired when the game's localization language is changed.
+  
+  ```csharp
+  event LanguageChangedDelegate LanguageChanged;
+  ```
+  
+  **Delegate signature:**
+  ```csharp
+  public delegate void LanguageChangedDelegate(string langCode);
+  ```
+  
+  - `langCode` - The new two-letter ISO language code
+</ResponseField>
+
+<ResponseField name="ActivePluginsChanged" type="event ActivePluginsChangedDelegate">
+  Fired when the active list of plugins changes (loaded, unloaded, updated).
+  
+  ```csharp
+  event ActivePluginsChangedDelegate ActivePluginsChanged;
+  ```
+  
+  **Delegate signature:**
+  ```csharp
+  public delegate void ActivePluginsChangedDelegate(IActivePluginsChangedEventArgs args);
+  ```
+  
+  - `args` - Event arguments containing information about the change
+</ResponseField>
+
+## Properties
+
+### Plugin Information
+
+<ResponseField name="Reason" type="PluginLoadReason">
+  Gets the reason this plugin was loaded.
+  
+  ```csharp
+  PluginLoadReason Reason { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="InternalName" type="string">
+  Gets the current internal plugin name.
+  
+  ```csharp
+  string InternalName { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="Manifest" type="IPluginManifest">
+  Gets the plugin's manifest containing metadata.
+  
+  ```csharp
+  IPluginManifest Manifest { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="SourceRepository" type="string">
+  Gets the repository from which this plugin was installed.
+  
+  If installed from the official/main repository, returns `SpecialPluginSource.MainRepo`. Developer plugins return `SpecialPluginSource.DevPlugin`.
+  
+  ```csharp
+  string SourceRepository { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="IsDev" type="bool">
+  Gets whether this is a development plugin.
+  
+  ```csharp
+  bool IsDev { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="IsTesting" type="bool">
+  Gets whether this is a testing release of a plugin.
+  
+  Dev plugins have undefined behavior for this value, but can be expected to return `false`.
+  
+  ```csharp
+  bool IsTesting { get; }
+  ```
+</ResponseField>
+
+### Timing
+
+<ResponseField name="LoadTime" type="DateTime">
+  Gets the local time that this plugin was loaded.
+  
+  ```csharp
+  DateTime LoadTime { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="LoadTimeUTC" type="DateTime">
+  Gets the UTC time that this plugin was loaded.
+  
+  ```csharp
+  DateTime LoadTimeUTC { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="LoadTimeDelta" type="TimeSpan">
+  Gets the timespan delta from when this plugin was loaded.
+  
+  ```csharp
+  TimeSpan LoadTimeDelta { get; }
+  ```
+</ResponseField>
+
+### Directories and Files
+
+<ResponseField name="DalamudAssetDirectory" type="DirectoryInfo">
+  Gets the directory where Dalamud assets are stored.
+  
+  ```csharp
+  DirectoryInfo DalamudAssetDirectory { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="AssemblyLocation" type="FileInfo">
+  Gets the location of your plugin assembly.
+  
+  ```csharp
+  FileInfo AssemblyLocation { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="ConfigDirectory" type="DirectoryInfo">
+  Gets the directory where your plugin configurations are stored.
+  
+  ```csharp
+  DirectoryInfo ConfigDirectory { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="ConfigFile" type="FileInfo">
+  Gets the config file of your plugin.
+  
+  ```csharp
+  FileInfo ConfigFile { get; }
+  ```
+</ResponseField>
+
+### UI and Development
+
+<ResponseField name="UiBuilder" type="IUiBuilder">
+  Gets the UiBuilder instance which allows you to draw UI into the game via ImGui.
+  
+  ```csharp
+  IUiBuilder UiBuilder { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="IsDevMenuOpen" type="bool">
+  Gets whether Dalamud is running in Debug mode or the /xldev menu is open. This can occur on release builds.
+  
+  ```csharp
+  bool IsDevMenuOpen { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="IsDebugging" type="bool">
+  Gets whether a debugger is attached.
+  
+  ```csharp
+  bool IsDebugging { get; }
+  ```
+</ResponseField>
+
+### Localization and Chat
+
+<ResponseField name="UiLanguage" type="string">
+  Gets the current UI language in two-letter ISO format.
+  
+  ```csharp
+  string UiLanguage { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="Sanitizer" type="ISanitizer">
+  Gets the serializer class with functions to remove special characters from strings.
+  
+  ```csharp
+  ISanitizer Sanitizer { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="GeneralChatType" type="XivChatType">
+  Gets the chat type used by default for plugin messages.
+  
+  ```csharp
+  XivChatType GeneralChatType { get; }
+  ```
+</ResponseField>
+
+### Plugin Management
+
+<ResponseField name="IsAutoUpdateComplete" type="bool">
+  Gets whether auto-updates have already completed this session.
+  
+  ```csharp
+  bool IsAutoUpdateComplete { get; }
+  ```
+</ResponseField>
+
+<ResponseField name="InstalledPlugins" type="IEnumerable<IExposedPlugin>">
+  Gets a list of installed plugins along with their current state.
+  
+  ```csharp
+  IEnumerable<IExposedPlugin> InstalledPlugins { get; }
+  ```
+</ResponseField>
+
+## Methods
+
+### UI Management
+
+<ResponseField name="OpenPluginInstallerTo" type="bool">
+  Opens the Plugin Installer window with optional search term.
+  
+  ```csharp
+  bool OpenPluginInstallerTo(
+      PluginInstallerOpenKind openTo = PluginInstallerOpenKind.AllPlugins,
+      string? searchText = null
+  )
+  ```
+  
+  <ParamField path="openTo" type="PluginInstallerOpenKind" default="AllPlugins">
+    The page to open the installer to
+  </ParamField>
+  
+  <ParamField path="searchText" type="string?" default="null">
+    Optional search text to input in the search box
+  </ParamField>
+  
+  **Returns:** `false` if the DalamudInterface was null, `true` otherwise
+</ResponseField>
+
+<ResponseField name="OpenDalamudSettingsTo" type="bool">
+  Opens the Settings window with optional search term.
+  
+  ```csharp
+  bool OpenDalamudSettingsTo(
+      SettingsOpenKind openTo = SettingsOpenKind.General,
+      string? searchText = null
+  )
+  ```
+  
+  <ParamField path="openTo" type="SettingsOpenKind" default="General">
+    The tab to open the settings to
+  </ParamField>
+  
+  <ParamField path="searchText" type="string?" default="null">
+    Optional search text to input in the search box
+  </ParamField>
+  
+  **Returns:** `false` if the DalamudInterface was null, `true` otherwise
+</ResponseField>
+
+<ResponseField name="OpenDeveloperMenu" type="bool">
+  Opens the dev menu bar.
+  
+  ```csharp
+  bool OpenDeveloperMenu()
+  ```
+  
+  **Returns:** `false` if the DalamudInterface was null, `true` otherwise
+</ResponseField>
+
+### Plugin Information
+
+<ResponseField name="GetPlugin" type="IExposedPlugin?">
+  Gets the plugin that the given assembly or context is part of.
+  
+  ```csharp
+  IExposedPlugin? GetPlugin(Assembly assembly)
+  IExposedPlugin? GetPlugin(AssemblyLoadContext context)
+  ```
+  
+  <ParamField path="assembly" type="Assembly">
+    The assembly to check
+  </ParamField>
+  
+  <ParamField path="context" type="AssemblyLoadContext">
+    The context to check
+  </ParamField>
+  
+  **Returns:** The plugin the assembly/context belongs to, or null if it's a shared assembly or the information cannot be determined
+</ResponseField>
+
+<ResponseField name="GetDalamudVersion" type="IDalamudVersionInfo">
+  Gets information about the version of Dalamud this plugin is loaded into.
+  
+  ```csharp
+  IDalamudVersionInfo GetDalamudVersion()
+  ```
+  
+  **Returns:** Class containing version information
+</ResponseField>
+
+### Configuration Management
+
+<ResponseField name="SavePluginConfig" type="void">
+  Saves a plugin configuration (inheriting IPluginConfiguration).
+  
+  ```csharp
+  void SavePluginConfig(IPluginConfiguration? currentConfig)
+  ```
+  
+  <ParamField path="currentConfig" type="IPluginConfiguration?">
+    The current configuration to save
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="GetPluginConfig" type="IPluginConfiguration?">
+  Gets a previously saved plugin configuration.
+  
+  ```csharp
+  IPluginConfiguration? GetPluginConfig()
+  ```
+  
+  **Returns:** A previously saved config or null if none was saved before
+</ResponseField>
+
+<ResponseField name="GetPluginConfigDirectory" type="string">
+  Gets the config directory path.
+  
+  ```csharp
+  string GetPluginConfigDirectory()
+  ```
+  
+  **Returns:** Directory path: `AppData/XIVLauncher/pluginConfig/PluginInternalName`
+</ResponseField>
+
+<ResponseField name="GetPluginLocDirectory" type="string">
+  Gets the localization directory path.
+  
+  ```csharp
+  string GetPluginLocDirectory()
+  ```
+  
+  **Returns:** Directory path: `AppData/XIVLauncher/pluginConfig/PluginInternalName/loc`
+</ResponseField>
+
+### Data Sharing
+
+<ResponseField name="GetOrCreateData" type="T">
+  Gets or creates shared data with the specified tag.
+  
+  ```csharp
+  T GetOrCreateData<T>(string tag, Func<T> dataGenerator) where T : class
+  ```
+  
+  <ParamField path="tag" type="string">
+    The unique identifier for the shared data
+  </ParamField>
+  
+  <ParamField path="dataGenerator" type="Func<T>">
+    Function to generate the data if it doesn't exist
+  </ParamField>
+  
+  **Returns:** The shared data instance
+</ResponseField>
+
+<ResponseField name="TryGetData" type="bool">
+  Attempts to get shared data with the specified tag.
+  
+  ```csharp
+  bool TryGetData<T>(string tag, [NotNullWhen(true)] out T? data) where T : class
+  ```
+  
+  <ParamField path="tag" type="string">
+    The unique identifier for the shared data
+  </ParamField>
+  
+  <ParamField path="data" type="T?">
+    Output parameter for the retrieved data
+  </ParamField>
+  
+  **Returns:** `true` if data was found, `false` otherwise
+</ResponseField>
+
+<ResponseField name="GetData" type="T?">
+  Gets shared data with the specified tag.
+  
+  ```csharp
+  T? GetData<T>(string tag) where T : class
+  ```
+  
+  <ParamField path="tag" type="string">
+    The unique identifier for the shared data
+  </ParamField>
+  
+  **Returns:** The shared data instance or null if not found
+</ResponseField>
+
+<ResponseField name="RelinquishData" type="void">
+  Removes shared data with the specified tag.
+  
+  ```csharp
+  void RelinquishData(string tag)
+  ```
+  
+  <ParamField path="tag" type="string">
+    The unique identifier for the shared data to remove
+  </ParamField>
+</ResponseField>
+
+### IPC (Inter-Plugin Communication)
+
+<ResponseField name="GetIpcProvider" type="ICallGateProvider<...>">
+  Gets an IPC provider for publishing functionality to other plugins.
+  
+  ```csharp
+  ICallGateProvider<TRet> GetIpcProvider<TRet>(string name)
+  ICallGateProvider<T1, TRet> GetIpcProvider<T1, TRet>(string name)
+  ICallGateProvider<T1, T2, TRet> GetIpcProvider<T1, T2, TRet>(string name)
+  // ... up to 8 type parameters
+  ```
+  
+  <ParamField path="name" type="string">
+    The name of the IPC registration
+  </ParamField>
+  
+  **Type Parameters:**
+  - `T1-T8` - Parameter types for the IPC call
+  - `TRet` - Return type (use `object` if unused)
+  
+  **Returns:** An IPC provider instance
+  
+  **Throws:** `IpcTypeMismatchError` when requested types don't match previously registered types
+</ResponseField>
+
+<ResponseField name="GetIpcSubscriber" type="ICallGateSubscriber<...>">
+  Gets an IPC subscriber for consuming functionality from other plugins.
+  
+  ```csharp
+  ICallGateSubscriber<TRet> GetIpcSubscriber<TRet>(string name)
+  ICallGateSubscriber<T1, TRet> GetIpcSubscriber<T1, TRet>(string name)
+  ICallGateSubscriber<T1, T2, TRet> GetIpcSubscriber<T1, T2, TRet>(string name)
+  // ... up to 8 type parameters
+  ```
+  
+  <ParamField path="name" type="string">
+    The name of the IPC registration
+  </ParamField>
+  
+  **Type Parameters:**
+  - `T1-T8` - Parameter types for the IPC call
+  - `TRet` - Return type (use `object` if unused)
+  
+  **Returns:** An IPC subscriber instance
+</ResponseField>
+
+### Dependency Injection
+
+<ResponseField name="Create" type="T?">
+  Creates a new object with dependency injection.
+  
+  ```csharp
+  T? Create<T>(params object[] scopedObjects) where T : class
+  ```
+  
+  <ParamField path="scopedObjects" type="object[]">
+    Additional objects to inject
+  </ParamField>
+  
+  **Returns:** The created and initialized instance, or null on failure
+</ResponseField>
+
+<ResponseField name="CreateAsync" type="Task<T>">
+  Asynchronously creates a new object with dependency injection.
+  
+  ```csharp
+  Task<T> CreateAsync<T>(params object[] scopedObjects) where T : class
+  ```
+  
+  <ParamField path="scopedObjects" type="object[]">
+    Additional objects to inject
+  </ParamField>
+  
+  **Returns:** A task representing the created and initialized instance
+</ResponseField>
+
+<ResponseField name="Inject" type="bool">
+  Injects services into properties on an existing object instance.
+  
+  ```csharp
+  bool Inject(object instance, params object[] scopedObjects)
+  ```
+  
+  <ParamField path="instance" type="object">
+    The instance to inject services into
+  </ParamField>
+  
+  <ParamField path="scopedObjects" type="object[]">
+    Additional objects to inject
+  </ParamField>
+  
+  **Returns:** Whether the injection succeeded
+</ResponseField>
+
+<ResponseField name="InjectAsync" type="Task">
+  Asynchronously injects services into properties on an existing object instance.
+  
+  ```csharp
+  Task InjectAsync(object instance, params object[] scopedObjects)
+  ```
+  
+  <ParamField path="instance" type="object">
+    The instance to inject services into
+  </ParamField>
+  
+  <ParamField path="scopedObjects" type="object[]">
+    Additional objects to inject
+  </ParamField>
+  
+  **Returns:** A task representing the status of the operation
+</ResponseField>
+
+## Usage Example
+
+```csharp
+using Dalamud.Plugin;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private IDalamudPluginInterface pluginInterface;
+
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        this.pluginInterface = pluginInterface;
+
+        // Subscribe to events
+        pluginInterface.LanguageChanged += OnLanguageChanged;
+        pluginInterface.ActivePluginsChanged += OnActivePluginsChanged;
+
+        // Access plugin info
+        var reason = pluginInterface.Reason;
+        var internalName = pluginInterface.InternalName;
+        
+        // Use UI builder
+        pluginInterface.UiBuilder.Draw += DrawUI;
+    }
+
+    private void OnLanguageChanged(string langCode)
+    {
+        // Handle language change
+    }
+
+    private void OnActivePluginsChanged(IActivePluginsChangedEventArgs args)
+    {
+        // Handle plugin list changes
+    }
+
+    private void DrawUI()
+    {
+        // Draw ImGui UI
+    }
+
+    public void Dispose()
+    {
+        pluginInterface.LanguageChanged -= OnLanguageChanged;
+        pluginInterface.ActivePluginsChanged -= OnActivePluginsChanged;
+        pluginInterface.UiBuilder.Draw -= DrawUI;
+    }
+}
+```
+
+## Related Types
+
+- [IDalamudPlugin](/api/plugin/idalamudplugin) - Base plugin interface
+- [PluginLoadReason](/api/plugin/plugin-load-reason) - Enum indicating why a plugin was loaded
+- [IExposedPlugin](/api/plugin/installed-plugin-state) - Interface representing installed plugins

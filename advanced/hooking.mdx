@@ -1,0 +1,387 @@
+---
+title: 'Function Hooking'
+description: 'Intercept and modify game function calls using Dalamud hooking system'
+icon: 'link'
+---
+
+## Overview
+
+Dalamud provides a powerful hooking system that allows you to intercept calls to game functions, inspect their parameters, modify their behavior, or call the original function. The hooking system supports multiple backends (Reloaded and MinHook) and various hooking strategies.
+
+<Warning>
+Hooking is a powerful but dangerous feature. Incorrect hooks can crash the game or cause undefined behavior. Always test thoroughly and handle errors gracefully.
+</Warning>
+
+## Creating Hooks
+
+### Hook from Address
+
+The most common way to create a hook is from a memory address:
+
+```csharp
+using Dalamud.Hooking;
+using Dalamud.Plugin.Services;
+
+public class MyPlugin
+{
+    private delegate nint MyFunctionDelegate(nint param1, int param2);
+    private Hook<MyFunctionDelegate>? myHook;
+    
+    public void Initialize(IGameInteropProvider interop, nint address)
+    {
+        // Create hook from address
+        this.myHook = interop.HookFromAddress<MyFunctionDelegate>(
+            address,
+            this.MyDetour
+        );
+        
+        // Enable the hook
+        this.myHook.Enable();
+    }
+    
+    private nint MyDetour(nint param1, int param2)
+    {
+        // Your custom code here
+        PluginLog.Information($"Function called with: {param1:X}, {param2}");
+        
+        // Call the original function
+        return this.myHook!.Original(param1, param2);
+    }
+}
+```
+
+### Hook from Signature
+
+You can create a hook directly from a signature without manually scanning:
+
+```csharp
+public void InitializeFromSignature(IGameInteropProvider interop)
+{
+    var signature = "E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 85 C9";
+    
+    this.myHook = interop.HookFromSignature<MyFunctionDelegate>(
+        signature,
+        this.MyDetour
+    );
+    
+    this.myHook.Enable();
+}
+```
+
+### Hook from Symbol
+
+For hooking exported functions from DLLs:
+
+```csharp
+public void HookWinApi(IGameInteropProvider interop)
+{
+    var sendHook = interop.HookFromSymbol<SendDelegate>(
+        "ws2_32.dll",
+        "send",
+        this.SendDetour
+    );
+    
+    sendHook.Enable();
+}
+```
+
+## Using Signature Attributes
+
+The recommended approach is to use the `[Signature]` attribute with `IGameInteropProvider.InitializeFromAttributes()`:
+
+```csharp
+using Dalamud.Hooking;
+using Dalamud.Utility.Signatures;
+
+public class MyHooks
+{
+    private delegate void SomeGameFunctionDelegate(nint a1, int a2);
+    
+    [Signature(
+        "E8 ?? ?? ?? ?? 48 8B 4C 24 ??",
+        DetourName = nameof(SomeGameFunctionDetour)
+    )]
+    private Hook<SomeGameFunctionDelegate>? someGameFunctionHook;
+    
+    public void Initialize(IGameInteropProvider interop)
+    {
+        // This will automatically create and assign the hook
+        interop.InitializeFromAttributes(this);
+        
+        // Enable all hooks
+        this.someGameFunctionHook?.Enable();
+    }
+    
+    private void SomeGameFunctionDetour(nint a1, int a2)
+    {
+        PluginLog.Debug($"Hooked function called: {a1:X}, {a2}");
+        this.someGameFunctionHook!.Original(a1, a2);
+    }
+    
+    public void Dispose()
+    {
+        this.someGameFunctionHook?.Dispose();
+    }
+}
+```
+
+## Hook Lifecycle
+
+### Enabling and Disabling
+
+```csharp
+// Enable the hook
+myHook.Enable();
+
+// Check if enabled
+if (myHook.IsEnabled)
+{
+    // Hook is active
+}
+
+// Temporarily disable
+myHook.Disable();
+
+// Re-enable
+myHook.Enable();
+```
+
+### Disposal
+
+Always dispose hooks when you're done:
+
+```csharp
+public void Dispose()
+{
+    // Dispose automatically disables the hook
+    this.myHook?.Dispose();
+}
+```
+
+## Calling Original Functions
+
+You have two ways to call the original function:
+
+```csharp
+private nint MyDetour(nint param1, int param2)
+{
+    // Standard way - throws if disposed
+    var result = this.myHook!.Original(param1, param2);
+    
+    // Dispose-safe way - works even after disposal
+    var result2 = this.myHook!.OriginalDisposeSafe(param1, param2);
+    
+    return result;
+}
+```
+
+<Note>
+Use `OriginalDisposeSafe` when you might need to call the original function during or after cleanup.
+</Note>
+
+## Assembly Hooks
+
+For advanced scenarios, you can inject raw assembly code:
+
+```csharp
+using Dalamud.Hooking;
+
+public class AssemblyHookExample
+{
+    private AsmHook? myAsmHook;
+    
+    public void CreateAsmHook(nint address)
+    {
+        // Assembly instructions to execute
+        string[] assembly = 
+        {
+            "use64",
+            "push rax",
+            "mov rax, 0x123456",
+            "pop rax",
+            "ret"
+        };
+        
+        this.myAsmHook = new AsmHook(
+            address,
+            assembly,
+            "MyAsmHook",
+            AsmHookBehaviour.ExecuteFirst
+        );
+        
+        this.myAsmHook.Enable();
+    }
+}
+```
+
+### Assembly Hook Behaviors
+
+- `ExecuteFirst`: Your assembly runs before the original code
+- `ExecuteAfter`: Your assembly runs after the original code
+- `DoNotExecuteOriginal`: Only your assembly runs (dangerous!)
+
+<Warning>
+Assembly hooks are extremely low-level and require deep understanding of x64 assembly and calling conventions. Use with extreme caution.
+</Warning>
+
+## Hook Backends
+
+### Reloaded (Default)
+
+The default backend, recommended for most use cases:
+
+```csharp
+var hook = interop.HookFromAddress<MyDelegate>(
+    address,
+    detour,
+    IGameInteropProvider.HookBackend.Reloaded
+);
+```
+
+### MinHook
+
+An alternative backend for compatibility:
+
+```csharp
+var hook = interop.HookFromAddress<MyDelegate>(
+    address,
+    detour,
+    IGameInteropProvider.HookBackend.MinHook
+);
+```
+
+<Note>
+Only use MinHook if you've confirmed that Reloaded doesn't work for your specific case. The Reloaded backend is more reliable in most scenarios.
+</Note>
+
+## Best Practices
+
+### Error Handling
+
+Always wrap detour logic in try-catch blocks:
+
+```csharp
+private nint MyDetour(nint param1, int param2)
+{
+    try
+    {
+        // Your logic here
+        PluginLog.Debug($"Called with {param1:X}");
+    }
+    catch (Exception ex)
+    {
+        PluginLog.Error(ex, "Error in hook detour");
+    }
+    
+    // Always call original
+    return this.myHook!.Original(param1, param2);
+}
+```
+
+### State Management
+
+Be careful with shared state in detours:
+
+```csharp
+private readonly object lockObject = new();
+private int callCount = 0;
+
+private nint MyDetour(nint param1, int param2)
+{
+    lock (this.lockObject)
+    {
+        this.callCount++;
+    }
+    
+    return this.myHook!.Original(param1, param2);
+}
+```
+
+### Performance
+
+Minimize work in frequently-called hooks:
+
+```csharp
+private nint HighFrequencyDetour(nint param1, int param2)
+{
+    // Bad: Heavy logging in hot path
+    // PluginLog.Information($"Called {DateTime.Now}");
+    
+    // Good: Conditional logging
+    if (this.debugMode)
+    {
+        PluginLog.Debug($"Called with {param1:X}");
+    }
+    
+    return this.myHook!.Original(param1, param2);
+}
+```
+
+## Common Patterns
+
+### Pre-Processing
+
+```csharp
+private void PreProcessDetour(nint data, int size)
+{
+    // Modify parameters before calling original
+    if (size > 1024)
+    {
+        PluginLog.Warning("Large size detected, clamping");
+        size = 1024;
+    }
+    
+    this.myHook!.Original(data, size);
+}
+```
+
+### Post-Processing
+
+```csharp
+private int PostProcessDetour(nint data)
+{
+    // Call original first
+    var result = this.myHook!.Original(data);
+    
+    // Process result
+    if (result < 0)
+    {
+        PluginLog.Error($"Function returned error: {result}");
+    }
+    
+    return result;
+}
+```
+
+### Conditional Execution
+
+```csharp
+private void ConditionalDetour(nint param1, int param2)
+{
+    if (this.shouldBlock)
+    {
+        // Don't call original - block the function
+        PluginLog.Info("Function blocked");
+        return;
+    }
+    
+    this.myHook!.Original(param1, param2);
+}
+```
+
+## Hook Properties
+
+You can inspect hook properties:
+
+```csharp
+PluginLog.Info($"Hook address: {myHook.Address:X}");
+PluginLog.Info($"Hook enabled: {myHook.IsEnabled}");
+PluginLog.Info($"Hook disposed: {myHook.IsDisposed}");
+PluginLog.Info($"Backend: {myHook.BackendName}");
+```
+
+## Related Topics
+
+- [Memory Operations](/advanced/memory) - Safe memory reading and writing
+- [Signature Scanning](/advanced/signatures) - Finding functions to hook
+- [Game Interop Provider](/advanced/game-interop) - Managing hooks and signatures

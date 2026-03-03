@@ -1,0 +1,480 @@
+---
+title: "Service Locator Pattern"
+description: "Using Service<T> to access Dalamud's internal services"
+icon: "magnifying-glass"
+---
+
+While [Dependency Injection](/concepts/dependency-injection) is the recommended way for plugins to access services, Dalamud internally uses the **Service Locator** pattern through the `Service<T>` class. Understanding this pattern is useful for advanced plugin development and understanding Dalamud's internals.
+
+<Warning>
+  The `Service<T>` class is **internal to Dalamud** and not accessible to plugins. This page is for educational purposes to help you understand how Dalamud works internally.
+</Warning>
+
+## What is Service Locator?
+
+The Service Locator pattern is an alternative to dependency injection where components request services from a central registry:
+
+```csharp
+// Instead of injection:
+public MyClass(IClientState clientState) { }
+
+// Service locator:
+public MyClass()
+{
+    var clientState = Service<IClientState>.Get();
+}
+```
+
+<Info>
+  Dalamud uses `Service<T>` internally but provides dependency injection to plugins for better testability and clarity.
+</Info>
+
+## The Service&lt;T&gt; Class
+
+Dalamud's service locator is implemented through a generic `Service<T>` class:
+
+```csharp
+// Usage in Dalamud internals:
+var clientState = Service<ClientState>.Get();
+var framework = Service<Framework>.Get();
+var pluginManager = Service<PluginManager>.Get();
+```
+
+### Service Registration
+
+Services are registered during Dalamud startup:
+
+```csharp
+// From ServiceManager.cs:135
+public static void InitializeProvidedServices(
+    Dalamud dalamud,
+    ReliableFileStorage fs,
+    DalamudConfiguration configuration,
+    TargetSigScanner scanner,
+    Localization localization)
+{
+    void ProvideAllServices()
+    {
+        // ServiceContainer MUST be first
+        ProvideService(new ServiceContainer());
+        
+        ProvideService(dalamud);
+        ProvideService(fs);
+        ProvideService(configuration);
+        ProvideService(scanner);
+        ProvideService(localization);
+    }
+    
+    ProvideAllServices();
+}
+```
+
+### Service Resolution
+
+Services can be retrieved synchronously or asynchronously:
+
+<Tabs>
+  <Tab title="Get() - Synchronous">
+    Blocks until the service is ready:
+    
+    ```csharp
+    var clientState = Service<ClientState>.Get();
+    ```
+    
+    <Warning>
+      This can deadlock if called during service initialization. Use `GetAsync()` instead.
+    </Warning>
+  </Tab>
+
+  <Tab title="GetAsync() - Asynchronous">
+    Returns a Task that completes when the service is ready:
+    
+    ```csharp
+    var clientState = await Service<ClientState>.GetAsync();
+    ```
+    
+    <Info>
+      Preferred method during startup or when the service might not be ready yet.
+    </Info>
+  </Tab>
+
+  <Tab title="GetNullable() - Safe">
+    Returns null if the service isn't available:
+    
+    ```csharp
+    var clientState = Service<ClientState>.GetNullable();
+    if (clientState != null)
+    {
+        // Use service
+    }
+    ```
+    
+    <Note>
+      Useful for optional dependencies or during shutdown.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Service Initialization Order
+
+Dalamud initializes services in a specific order to handle dependencies:
+
+<Steps>
+  <Step title="Provided Services">
+    Manually created services are registered first:
+    
+    ```csharp
+    // From Dalamud.cs:72
+    ServiceManager.InitializeProvidedServices(
+        this, fs, configuration, scanner, localization);
+    ```
+    
+    These include:
+    - `ServiceContainer`
+    - `Dalamud` itself
+    - `ReliableFileStorage`
+    - `DalamudConfiguration`
+    - `TargetSigScanner`
+    - `Localization`
+  </Step>
+
+  <Step title="Early-Loaded Services">
+    Services marked with `[EarlyLoadedService]` are created asynchronously:
+    
+    ```csharp
+    // From ServiceManager.cs:191
+    public static async Task InitializeEarlyLoadableServices()
+    {
+        // Discovers and loads early services
+    }
+    ```
+  </Step>
+
+  <Step title="Blocking Services">
+    Services marked with `[BlockingEarlyLoadedService]` block game startup:
+    
+    ```csharp
+    // From PluginManager.cs:45
+    [ServiceManager.BlockingEarlyLoadedService(
+        "Accommodation of plugins that blocks the game startup.")]
+    internal class PluginManager : IInternalDisposableService
+    ```
+  </Step>
+
+  <Step title="Dependency Resolution">
+    Services with dependencies are initialized after their dependencies:
+    
+    ```csharp
+    // From ServiceManager.cs:250
+    var typeAsServiceT = ServiceHelpers.GetAsService(serviceType);
+    dependencyServicesMap[serviceType] = ServiceHelpers.GetDependencies(typeAsServiceT, false)
+                                                       .Select(x => typeof(Service<>).MakeGenericType(x))
+                                                       .ToList();
+    ```
+  </Step>
+</Steps>
+
+## Service Dependencies
+
+Services can declare dependencies using the `[ServiceDependency]` attribute:
+
+```csharp
+// From PluginManager.cs:67
+[ServiceManager.ServiceDependency]
+private readonly DalamudConfiguration configuration = Service<DalamudConfiguration>.Get();
+
+[ServiceManager.ServiceDependency]
+private readonly Dalamud dalamud = Service<Dalamud>.Get();
+
+[ServiceManager.ServiceDependency]
+private readonly ProfileManager profileManager = Service<ProfileManager>.Get();
+```
+
+This ensures dependencies are initialized before the service constructor runs.
+
+## Service Lifecycle
+
+### Construction
+
+Services are constructed with special handling:
+
+```csharp
+// From ServiceManager.cs:363
+tasks.Add((Task)typeof(Service<>)
+                .MakeGenericType(serviceType)
+                .InvokeMember(
+                    nameof(Service<IServiceType>.StartLoader),
+                    BindingFlags.InvokeMethod | BindingFlags.Static | BindingFlags.NonPublic,
+                    null,
+                    null,
+                    [startLoaderArgs]));
+```
+
+### Unloading
+
+Services are unloaded in reverse dependency order:
+
+```csharp
+// From ServiceManager.cs:444
+public static void UnloadAllServices()
+{
+    // Build dependency map
+    var dependencyServicesMap = new Dictionary<Type, IReadOnlyCollection<Type>>();
+    
+    // Unload in reverse order
+    unloadOrder.Reverse();
+    foreach (var type in unloadOrder)
+    {
+        typeof(Service<>)
+                .MakeGenericType(type)
+                .InvokeMember("Unset", BindingFlags.InvokeMethod | BindingFlags.Static | BindingFlags.NonPublic,
+                              null, null, null);
+    }
+}
+```
+
+## Why Plugins Use DI Instead
+
+Plugins don't have access to `Service<T>` for several important reasons:
+
+<AccordionGroup>
+  <Accordion title="Encapsulation" icon="shield">
+    `Service<T>` is marked as `internal`, hiding implementation details:
+    
+    ```csharp
+    // Plugins cannot access this
+    internal static class ServiceManager
+    ```
+    
+    This allows Dalamud to change its internal service implementation without breaking plugins.
+  </Accordion>
+
+  <Accordion title="Testability" icon="flask">
+    Dependency injection makes plugin code more testable:
+    
+    ```csharp
+    // Easy to test with mocks
+    public MyPlugin(IClientState clientState)
+    {
+        this.clientState = clientState;
+    }
+    
+    // Hard to test - requires service to be registered
+    public MyPlugin()
+    {
+        this.clientState = Service<ClientState>.Get();
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Explicit Dependencies" icon="list">
+    Constructor parameters make dependencies clear:
+    
+    ```csharp
+    // Dependencies are obvious
+    public MyPlugin(IClientState clientState, IChatGui chat, ICommandManager commands)
+    
+    // Dependencies are hidden in implementation
+    public MyPlugin()
+    {
+        // What services does this use? Have to read the code!
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Lifetime Management" icon="clock">
+    DI container ensures services are available when plugins construct:
+    
+    ```csharp
+    // Container guarantees clientState is ready
+    public MyPlugin(IClientState clientState)
+    
+    // Might not be ready yet!
+    public MyPlugin()
+    {
+        var clientState = Service<ClientState>.Get(); // Could block or fail
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Internal Usage Examples
+
+Here's how Dalamud uses `Service<T>` internally:
+
+### Accessing Services
+
+```csharp
+// From EntryPoint.cs:298
+var pm = Service<PluginManager>.GetNullable();
+var plugin = pm?.FindCallingPlugin(new StackTrace(ex));
+```
+
+### Service Dependencies
+
+```csharp
+// From PluginManager.cs:67
+[ServiceManager.ServiceDependency]
+private readonly DalamudConfiguration configuration = Service<DalamudConfiguration>.Get();
+```
+
+### Async Service Access
+
+```csharp
+// From PluginManager.cs:657
+var framework = await Service<Framework>.GetAsync().ConfigureAwait(false);
+await framework.RunOnTick(() => LoadPluginsSync(...));
+```
+
+### Null-Safe Access
+
+```csharp
+// From Dalamud.cs:178
+var reportCrashesSetting = Service<DalamudConfiguration>.GetNullable()?.ReportShutdownCrashes ?? true;
+var pmHasDevPlugins = Service<PluginManager>.GetNullable()?.InstalledPlugins.Any(x => x.IsDev) ?? false;
+```
+
+## Service Registry
+
+The `ServiceContainer` maintains the registry of all services:
+
+```csharp
+// From ServiceContainer.cs:26
+private readonly Dictionary<Type, ObjectInstance> instances = [];
+private readonly Dictionary<Type, Type> interfaceToTypeMap = [];
+```
+
+Services can be looked up by concrete type or interface:
+
+```csharp
+// From ServiceContainer.cs:195
+private async Task<object?> GetSingletonService(Type serviceType, bool tryGetInterface = true)
+{
+    if (tryGetInterface && this.interfaceToTypeMap.TryGetValue(serviceType, out var implementingType))
+        serviceType = implementingType;
+    
+    if (!this.instances.TryGetValue(serviceType, out var service))
+        return null;
+    
+    var instance = await service.InstanceTask;
+    return instance.Target;
+}
+```
+
+## Comparison: DI vs Service Locator
+
+<Tabs>
+  <Tab title="Dependency Injection (Plugins)">
+    **Advantages:**
+    - Explicit dependencies
+    - Easy to test with mocks
+    - Type-safe at compile time
+    - Framework manages lifetime
+    
+    **Example:**
+    ```csharp
+    public MyPlugin(IClientState clientState, IChatGui chat)
+    {
+        // Dependencies injected automatically
+    }
+    ```
+  </Tab>
+
+  <Tab title="Service Locator (Internal)">
+    **Advantages:**
+    - No constructor changes needed
+    - Can request services anywhere
+    - Flexible for framework code
+    
+    **Disadvantages:**
+    - Hidden dependencies
+    - Harder to test
+    - Can fail at runtime
+    
+    **Example:**
+    ```csharp
+    public void SomeMethod()
+    {
+        var clientState = Service<ClientState>.Get();
+        // Service requested on-demand
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices for Plugin Authors
+
+<AccordionGroup>
+  <Accordion title="Use Dependency Injection" icon="check">
+    Always use constructor or property injection in plugins:
+    
+    ```csharp
+    // Good - explicit dependencies
+    public MyPlugin(IClientState clientState, IChatGui chat)
+    {
+        this.clientState = clientState;
+        this.chat = chat;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Don't Try to Access Service<T>" icon="ban">
+    `Service<T>` is internal and not accessible to plugins:
+    
+    ```csharp
+    // This won't compile - Service<T> is internal
+    var clientState = Service<ClientState>.Get();
+    ```
+  </Accordion>
+
+  <Accordion title="Request What You Need" icon="hand">
+    Only inject services you actually use:
+    
+    ```csharp
+    // Good - only what's needed
+    public MyPlugin(IClientState clientState)
+    
+    // Bad - requesting everything
+    public MyPlugin(
+        IClientState clientState,
+        IDataManager dataManager,
+        IGameGui gameGui,
+        ITextureProvider textures,
+        // ... 10 more you don't use
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Understanding the Pattern
+
+Knowing about the Service Locator pattern helps you understand:
+
+1. **How Dalamud initializes** - Services are registered and resolved through `Service<T>`
+2. **Why DI is used for plugins** - It's a better pattern for plugin developers
+3. **How services interact** - Internal Dalamud code uses `Service<T>` to communicate
+4. **The architecture** - Dalamud uses a hybrid approach: Service Locator internally, DI for plugins
+
+<Info>
+  When reading Dalamud source code, you'll see `Service<T>.Get()` frequently. This is the internal service locator pattern at work.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Dependency Injection" icon="plug" href="/concepts/dependency-injection">
+    Learn how to use DI in your plugins
+  </Card>
+
+  <Card title="Architecture" icon="building" href="/concepts/architecture">
+    Understand how services fit into the architecture
+  </Card>
+
+  <Card title="Plugin Lifecycle" icon="rotate" href="/concepts/plugin-lifecycle">
+    See when services become available during plugin loading
+  </Card>
+
+  <Card title="API Reference" icon="book" href="/api/services/overview">
+    View the full list of services
+  </Card>
+</CardGroup>

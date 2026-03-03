@@ -1,0 +1,313 @@
+---
+title: IFramework
+description: Access the game framework and schedule tasks
+---
+
+## Overview
+
+`IFramework` represents the Framework of the native game client and grants access to various subsystems. It provides framework update events and methods for scheduling tasks on the framework thread.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Events
+
+### Update
+
+```csharp
+public event OnUpdateDelegate Update;
+```
+
+Fired every time the game framework updates (every frame).
+
+<ParamField path="framework" type="IFramework">
+  The Framework instance
+</ParamField>
+
+## Properties
+
+### LastUpdate
+
+```csharp
+public DateTime LastUpdate { get; }
+```
+
+Gets the last time that the Framework Update event was triggered.
+
+<ResponseField name="LastUpdate" type="DateTime">
+  The local time of the last update
+</ResponseField>
+
+### LastUpdateUTC
+
+```csharp
+public DateTime LastUpdateUTC { get; }
+```
+
+Gets the last time in UTC that the Framework Update event was triggered.
+
+<ResponseField name="LastUpdateUTC" type="DateTime">
+  The UTC time of the last update
+</ResponseField>
+
+### UpdateDelta
+
+```csharp
+public TimeSpan UpdateDelta { get; }
+```
+
+Gets the delta between the last Framework Update and the currently executing one.
+
+<ResponseField name="UpdateDelta" type="TimeSpan">
+  The time delta between updates
+</ResponseField>
+
+### IsInFrameworkUpdateThread
+
+```csharp
+public bool IsInFrameworkUpdateThread { get; }
+```
+
+Gets a value indicating whether currently executing code is running in the game's framework update thread.
+
+<ResponseField name="IsInFrameworkUpdateThread" type="bool">
+  True if on framework thread
+</ResponseField>
+
+### IsFrameworkUnloading
+
+```csharp
+public bool IsFrameworkUnloading { get; }
+```
+
+Gets a value indicating whether game Framework is unloading.
+
+<ResponseField name="IsFrameworkUnloading" type="bool">
+  True if framework is unloading
+</ResponseField>
+
+## Methods
+
+### GetTaskFactory
+
+```csharp
+public TaskFactory GetTaskFactory();
+```
+
+Gets a TaskFactory that runs tasks during Framework Update event.
+
+<ResponseField name="return" type="TaskFactory">
+  The task factory
+</ResponseField>
+
+### DelayTicks
+
+```csharp
+public Task DelayTicks(long numTicks, CancellationToken cancellationToken = default);
+```
+
+Returns a task that completes after the given number of ticks.
+
+<ParamField path="numTicks" type="long" required>
+  Number of ticks to delay
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken">
+  The cancellation token
+</ParamField>
+
+<ResponseField name="return" type="Task">
+  A new Task that gets resolved after specified number of ticks
+</ResponseField>
+
+### Run
+
+```csharp
+public Task Run(Action action, CancellationToken cancellationToken = default);
+public Task<T> Run<T>(Func<T> action, CancellationToken cancellationToken = default);
+public Task Run(Func<Task> action, CancellationToken cancellationToken = default);
+public Task<T> Run<T>(Func<Task<T>> action, CancellationToken cancellationToken = default);
+```
+
+Runs the given function right away if called from the framework update thread, or on the next Framework.Update call otherwise.
+
+<ParamField path="action" type="Action | Func<T> | Func<Task> | Func<Task<T>>" required>
+  Function to call
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken">
+  The cancellation token
+</ParamField>
+
+<ResponseField name="return" type="Task | Task<T>">
+  Task representing the pending or already completed function
+</ResponseField>
+
+### RunOnFrameworkThread
+
+```csharp
+public Task<T> RunOnFrameworkThread<T>(Func<T> func);
+public Task RunOnFrameworkThread(Action action);
+```
+
+Runs the given function right away if called from the framework update thread, or on the next Framework.Update call otherwise.
+
+<ParamField path="func" type="Func<T> | Action" required>
+  Function to call
+</ParamField>
+
+<ResponseField name="return" type="Task<T> | Task">
+  Task representing the pending or already completed function
+</ResponseField>
+
+### RunOnTick
+
+```csharp
+public Task<T> RunOnTick<T>(Func<T> func, TimeSpan delay = default, int delayTicks = default, CancellationToken cancellationToken = default);
+public Task RunOnTick(Action action, TimeSpan delay = default, int delayTicks = default, CancellationToken cancellationToken = default);
+public Task<T> RunOnTick<T>(Func<Task<T>> func, TimeSpan delay = default, int delayTicks = default, CancellationToken cancellationToken = default);
+public Task RunOnTick(Func<Task> func, TimeSpan delay = default, int delayTicks = default, CancellationToken cancellationToken = default);
+```
+
+Runs the given function in an upcoming Framework.Tick call.
+
+<ParamField path="func" type="Func<T> | Action | Func<Task<T>> | Func<Task>" required>
+  Function to call
+</ParamField>
+
+<ParamField path="delay" type="TimeSpan">
+  Wait for given timespan before calling this function
+</ParamField>
+
+<ParamField path="delayTicks" type="int">
+  Count given number of Framework.Tick calls before calling this function. This takes precedence over delay parameter
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken">
+  Cancellation token which will prevent the execution of this function if wait conditions are not met
+</ParamField>
+
+<ResponseField name="return" type="Task<T> | Task">
+  Task representing the pending function
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IFramework framework;
+    
+    public MyPlugin(IFramework framework)
+    {
+        this.framework = framework;
+        
+        // Subscribe to framework updates
+        this.framework.Update += OnFrameworkUpdate;
+    }
+    
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        // Called every frame
+        // Be careful with performance here!
+        var delta = framework.UpdateDelta.TotalMilliseconds;
+        
+        // Do frame-based logic
+    }
+    
+    public async Task PerformDelayedAction()
+    {
+        // Wait 5 seconds
+        await this.framework.RunOnTick(
+            () => Log.Information("5 seconds passed"),
+            delay: TimeSpan.FromSeconds(5));
+        
+        // Wait 60 frames
+        await this.framework.RunOnTick(
+            () => Log.Information("60 frames passed"),
+            delayTicks: 60);
+    }
+    
+    public void RunOnMainThread()
+    {
+        // Ensure code runs on framework thread
+        this.framework.RunOnFrameworkThread(() =>
+        {
+            // This code will run on the framework thread
+            Log.Information("Running on framework thread");
+        });
+    }
+    
+    public void Dispose()
+    {
+        this.framework.Update -= OnFrameworkUpdate;
+    }
+}
+```
+
+## Advanced Usage
+
+### Using async/await with Framework
+
+```csharp
+public async Task DoAsyncWork()
+{
+    // Run on framework thread
+    await this.framework.Run(async () =>
+    {
+        Log.Information("Starting work on framework thread");
+        
+        // Do some async work
+        await Task.Delay(1000);
+        
+        // This continues on framework thread
+        Log.Information("Completed work on framework thread");
+    });
+}
+```
+
+### Checking Thread Context
+
+```csharp
+public void DoWork()
+{
+    if (this.framework.IsInFrameworkUpdateThread)
+    {
+        // We're already on the framework thread
+        PerformWork();
+    }
+    else
+    {
+        // Schedule to run on framework thread
+        this.framework.RunOnFrameworkThread(() => PerformWork());
+    }
+}
+```
+
+### Frame Timing
+
+```csharp
+private DateTime lastCheck = DateTime.MinValue;
+
+private void OnFrameworkUpdate(IFramework framework)
+{
+    // Only run every second
+    if ((framework.LastUpdate - this.lastCheck).TotalSeconds >= 1.0)
+    {
+        this.lastCheck = framework.LastUpdate;
+        // Do work
+    }
+}
+```
+
+## Remarks
+
+- The `Update` event fires every frame - be mindful of performance
+- Use `Run` when you need async/await to keep executing on the main thread
+- Use `RunOnFrameworkThread` when you need to call `Task.Wait()` or `Task.Result`
+- Always unsubscribe from the `Update` event in your plugin's `Dispose()` method
+- Starting new tasks and waiting synchronously from callbacks will lock up the game
+- The continuation after `await` in `Run` runs on the framework thread by default

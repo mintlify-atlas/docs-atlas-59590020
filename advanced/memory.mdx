@@ -1,0 +1,473 @@
+---
+title: 'Memory Operations'
+description: 'Safely read and write process memory with SafeMemory'
+icon: 'memory'
+---
+
+## Overview
+
+The `SafeMemory` class provides safe methods for reading and writing memory in the game process. Unlike direct `Marshal` calls, SafeMemory uses `ReadProcessMemory` and `WriteProcessMemory` which provide better error handling and protection against invalid memory accesses.
+
+<Warning>
+SafeMemory is significantly slower than direct Marshal calls. Use Marshal in performance-critical code, but prefer SafeMemory for safer operations where performance is not critical.
+</Warning>
+
+## Reading Memory
+
+### Reading Bytes
+
+Read raw byte arrays from memory:
+
+```csharp
+using Dalamud;
+
+public void ReadExample(nint address)
+{
+    if (SafeMemory.ReadBytes(address, 16, out var bytes))
+    {
+        PluginLog.Info($"Read {bytes.Length} bytes");
+        // Process bytes
+    }
+    else
+    {
+        PluginLog.Error("Failed to read memory");
+    }
+}
+```
+
+### Reading Structures
+
+Read typed structures directly:
+
+```csharp
+public struct PlayerData
+{
+    public int Health;
+    public int MaxHealth;
+    public float PositionX;
+    public float PositionY;
+    public float PositionZ;
+}
+
+public void ReadStruct(nint address)
+{
+    if (SafeMemory.Read<PlayerData>(address, out var data))
+    {
+        PluginLog.Info($"Health: {data.Health}/{data.MaxHealth}");
+        PluginLog.Info($"Position: ({data.PositionX}, {data.PositionY}, {data.PositionZ})");
+    }
+}
+```
+
+### Reading Arrays
+
+Read arrays of structures:
+
+```csharp
+public void ReadArray(nint address, int count)
+{
+    var items = SafeMemory.Read<PlayerData>(address, count);
+    
+    if (items != null)
+    {
+        for (int i = 0; i < items.Length; i++)
+        {
+            PluginLog.Info($"Item {i}: Health={items[i].Health}");
+        }
+    }
+    else
+    {
+        PluginLog.Error("Failed to read array");
+    }
+}
+```
+
+### Reading Strings
+
+Read UTF-8 strings from memory:
+
+```csharp
+public void ReadString(nint address)
+{
+    var text = SafeMemory.ReadString(address, maxLength: 256);
+    
+    if (text != null)
+    {
+        PluginLog.Info($"String: {text}");
+    }
+}
+```
+
+Read strings with custom encoding:
+
+```csharp
+using System.Text;
+
+public void ReadCustomString(nint address)
+{
+    var text = SafeMemory.ReadString(address, Encoding.Unicode, maxLength: 256);
+    
+    if (text != null)
+    {
+        PluginLog.Info($"Unicode string: {text}");
+    }
+}
+```
+
+<Warning>
+When reading FFXIV game strings, do not use SafeMemory.ReadString as it will destroy the game's payload structure. Use ReadBytes and parse with the appropriate SeString class instead.
+</Warning>
+
+## Writing Memory
+
+### Writing Bytes
+
+Write raw byte arrays:
+
+```csharp
+public void WriteBytes(nint address)
+{
+    byte[] data = { 0x90, 0x90, 0x90, 0x90 }; // NOP instructions
+    
+    if (SafeMemory.WriteBytes(address, data))
+    {
+        PluginLog.Info("Successfully wrote bytes");
+    }
+    else
+    {
+        PluginLog.Error("Failed to write bytes");
+    }
+}
+```
+
+### Writing Structures
+
+Write typed structures:
+
+```csharp
+public void WriteStruct(nint address)
+{
+    var data = new PlayerData
+    {
+        Health = 1000,
+        MaxHealth = 1000,
+        PositionX = 100.0f,
+        PositionY = 50.0f,
+        PositionZ = 200.0f
+    };
+    
+    if (SafeMemory.Write(address, data))
+    {
+        PluginLog.Info("Successfully wrote structure");
+    }
+}
+```
+
+### Writing Arrays
+
+Write arrays of structures:
+
+```csharp
+public void WriteArray(nint address)
+{
+    var items = new PlayerData[5];
+    
+    for (int i = 0; i < items.Length; i++)
+    {
+        items[i] = new PlayerData { Health = 100 * (i + 1) };
+    }
+    
+    if (SafeMemory.Write(address, items))
+    {
+        PluginLog.Info("Successfully wrote array");
+    }
+}
+```
+
+### Writing Strings
+
+Write UTF-8 strings to memory:
+
+```csharp
+public void WriteString(nint address)
+{
+    if (SafeMemory.WriteString(address, "Hello, World!"))
+    {
+        PluginLog.Info("Successfully wrote string");
+    }
+}
+```
+
+Write strings with custom encoding:
+
+```csharp
+public void WriteCustomString(nint address)
+{
+    if (SafeMemory.WriteString(address, "Hello!", Encoding.Unicode))
+    {
+        PluginLog.Info("Successfully wrote Unicode string");
+    }
+}
+```
+
+<Note>
+Strings are automatically null-terminated when written with WriteString.
+</Note>
+
+## Advanced Operations
+
+### PtrToStructure
+
+Convert memory pointers to managed structures:
+
+```csharp
+public void ConvertPointer(nint address)
+{
+    var data = SafeMemory.PtrToStructure<PlayerData>(address);
+    
+    if (data.HasValue)
+    {
+        PluginLog.Info($"Health: {data.Value.Health}");
+    }
+}
+```
+
+With Type parameter:
+
+```csharp
+public void ConvertPointerDynamic(nint address, Type structType)
+{
+    var obj = SafeMemory.PtrToStructure(address, structType);
+    
+    if (obj != null)
+    {
+        // Process object
+    }
+}
+```
+
+### Size Calculation
+
+Get the size of a structure:
+
+```csharp
+public void CheckSize()
+{
+    var size = SafeMemory.SizeOf<PlayerData>();
+    PluginLog.Info($"PlayerData size: {size} bytes");
+}
+```
+
+<Note>
+SafeMemory.SizeOf handles boolean types correctly (as 1 byte) unlike Marshal.SizeOf.
+</Note>
+
+## Direct Memory Access
+
+For performance-critical code, use `Marshal` directly:
+
+```csharp
+using System.Runtime.InteropServices;
+
+public unsafe void FastRead(nint address)
+{
+    // Fast but unsafe - no error checking
+    var data = Marshal.PtrToStructure<PlayerData>(address);
+    
+    // Even faster - direct pointer access
+    var ptr = (PlayerData*)address;
+    var health = ptr->Health;
+}
+
+public unsafe void FastWrite(nint address)
+{
+    var data = new PlayerData { Health = 1000 };
+    
+    // Fast write
+    Marshal.StructureToPtr(data, address, false);
+    
+    // Or direct pointer write
+    var ptr = (PlayerData*)address;
+    ptr->Health = 1000;
+}
+```
+
+<Warning>
+Direct memory access with Marshal or pointers provides no protection against invalid memory addresses and can crash the game. Only use in performance-critical paths where you've verified the addresses are valid.
+</Warning>
+
+## Memory Patterns
+
+### Reading Pointer Chains
+
+Follow pointer chains safely:
+
+```csharp
+public nint? FollowPointerChain(nint baseAddress, int[] offsets)
+{
+    var current = baseAddress;
+    
+    for (int i = 0; i < offsets.Length - 1; i++)
+    {
+        if (!SafeMemory.Read<nint>(current + offsets[i], out var next))
+        {
+            return null;
+        }
+        
+        if (next == nint.Zero)
+        {
+            return null;
+        }
+        
+        current = next;
+    }
+    
+    return current + offsets[^1];
+}
+
+// Usage
+public void ReadFromChain(nint baseAddress)
+{
+    int[] offsets = { 0x10, 0x28, 0x8, 0x0 };
+    var address = this.FollowPointerChain(baseAddress, offsets);
+    
+    if (address.HasValue)
+    {
+        SafeMemory.Read<int>(address.Value, out var value);
+        PluginLog.Info($"Value: {value}");
+    }
+}
+```
+
+### Validating Addresses
+
+Check if an address is readable:
+
+```csharp
+public bool IsValidAddress(nint address)
+{
+    // Try to read a single byte
+    return SafeMemory.ReadBytes(address, 1, out _);
+}
+```
+
+### Batch Operations
+
+Read multiple values efficiently:
+
+```csharp
+public class BatchReader
+{
+    private readonly Dictionary<string, nint> addresses = new();
+    
+    public void ReadAll()
+    {
+        foreach (var (name, address) in this.addresses)
+        {
+            if (SafeMemory.Read<int>(address, out var value))
+            {
+                PluginLog.Debug($"{name}: {value}");
+            }
+        }
+    }
+}
+```
+
+## Common Structures
+
+### Fixed-Size Buffers
+
+```csharp
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct FixedBuffer
+{
+    public fixed byte Data[256];
+    
+    public string GetString()
+    {
+        fixed (byte* ptr = this.Data)
+        {
+            return Marshal.PtrToStringUTF8((nint)ptr) ?? string.Empty;
+        }
+    }
+}
+```
+
+### Explicit Layout
+
+```csharp
+[StructLayout(LayoutKind.Explicit)]
+public struct UnionExample
+{
+    [FieldOffset(0)]
+    public int IntValue;
+    
+    [FieldOffset(0)]
+    public float FloatValue;
+    
+    [FieldOffset(0)]
+    public uint UIntValue;
+}
+```
+
+## Performance Considerations
+
+### When to Use SafeMemory
+
+- Reading from unknown or user-provided addresses
+- One-time initialization reads
+- Debug/diagnostic operations
+- Operations where safety is more important than speed
+
+### When to Use Marshal/Pointers
+
+- Reading from known, validated addresses
+- Hot paths called every frame
+- Bulk data operations
+- Performance-critical game loops
+
+### Benchmarking Example
+
+```csharp
+using System.Diagnostics;
+
+public void BenchmarkReads(nint address)
+{
+    const int iterations = 100000;
+    
+    // SafeMemory benchmark
+    var sw1 = Stopwatch.StartNew();
+    for (int i = 0; i < iterations; i++)
+    {
+        SafeMemory.Read<int>(address, out _);
+    }
+    sw1.Stop();
+    
+    // Marshal benchmark
+    var sw2 = Stopwatch.StartNew();
+    for (int i = 0; i < iterations; i++)
+    {
+        _ = Marshal.ReadInt32(address);
+    }
+    sw2.Stop();
+    
+    PluginLog.Info($"SafeMemory: {sw1.ElapsedMilliseconds}ms");
+    PluginLog.Info($"Marshal: {sw2.ElapsedMilliseconds}ms");
+}
+```
+
+## Best Practices
+
+1. **Always check return values** from SafeMemory operations
+2. **Validate addresses** before reading/writing
+3. **Use SafeMemory** for untrusted addresses
+4. **Use Marshal** for performance-critical code with validated addresses
+5. **Handle errors gracefully** - don't crash on failed reads
+6. **Avoid writing memory** unless absolutely necessary
+7. **Test thoroughly** - memory operations can crash the game
+
+## Related Topics
+
+- [Signature Scanning](/advanced/signatures) - Finding memory addresses
+- [Function Hooking](/advanced/hooking) - Intercepting function calls
+- [Client Structs](/advanced/client-structs) - Game structure definitions

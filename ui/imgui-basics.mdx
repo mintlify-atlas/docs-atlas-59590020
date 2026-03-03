@@ -1,0 +1,688 @@
+---
+title: ImGui Basics
+description: Introduction to ImGui controls and immediate mode GUI concepts
+---
+
+Dalamud uses Dear ImGui, a bloat-free immediate mode graphical user interface library. ImGui provides a simple, efficient way to create debug tools and in-game interfaces.
+
+## Immediate Mode Concept
+
+Unlike traditional retained-mode GUI systems, ImGui uses an **immediate mode** approach where you describe your UI every frame:
+
+```csharp
+// This code runs every frame
+private void DrawUI()
+{
+    ImGui.Begin("My Window");
+    
+    if (ImGui.Button("Click me"))
+    {
+        // This runs when the button is clicked
+    }
+    
+    ImGui.End();
+}
+```
+
+No need to create objects, register callbacks, or manage state - just call functions.
+
+## Basic Window Management
+
+### Creating a Window
+
+```csharp
+ImGui.Begin("Window Title");
+// Window content goes here
+ImGui.End();
+```
+
+### Window with Close Button
+
+```csharp
+private bool isWindowOpen = true;
+
+private void DrawUI()
+{
+    if (ImGui.Begin("My Window", ref this.isWindowOpen))
+    {
+        ImGui.Text("Window content");
+    }
+    ImGui.End();
+    
+    // isWindowOpen is set to false when user clicks the X button
+}
+```
+
+### Window Flags
+
+```csharp
+var flags = ImGuiWindowFlags.NoResize 
+          | ImGuiWindowFlags.NoMove 
+          | ImGuiWindowFlags.NoCollapse;
+          
+ImGui.Begin("Fixed Window", flags);
+ImGui.Text("This window can't be resized or moved");
+ImGui.End();
+```
+
+Common flags:
+- `NoTitleBar` - Remove title bar
+- `NoResize` - Disable resizing
+- `NoMove` - Prevent moving
+- `NoScrollbar` - Hide scrollbars
+- `NoCollapse` - Disable collapsing
+- `AlwaysAutoResize` - Auto-resize to content
+- `NoBackground` - Transparent background
+- `NoInputs` - Disable all inputs
+
+## Text and Labels
+
+### Basic Text
+
+```csharp
+ImGui.Text("Simple text");
+ImGui.TextColored(new Vector4(1, 0, 0, 1), "Red text");
+ImGui.TextDisabled("Disabled/gray text");
+ImGui.TextWrapped("This text will wrap to fit the window width");
+```
+
+### Formatted Text
+
+```csharp
+int health = 100;
+ImGui.Text($"Health: {health}");
+```
+
+### Colored Text
+
+```csharp
+using Dalamud.Interface.Colors;
+
+ImGui.TextColored(ImGuiColors.DalamudRed, "Error message");
+ImGui.TextColored(ImGuiColors.HealerGreen, "Success!");
+ImGui.TextColored(ImGuiColors.DalamudGrey, "Muted text");
+```
+
+### Bullet Lists
+
+```csharp
+ImGui.BulletText("First item");
+ImGui.BulletText("Second item");
+ImGui.BulletText("Third item");
+```
+
+## Buttons
+
+### Basic Button
+
+```csharp
+if (ImGui.Button("Click Me"))
+{
+    // Button was clicked
+}
+```
+
+### Sized Button
+
+```csharp
+if (ImGui.Button("Wide Button", new Vector2(200, 40)))
+{
+    // Clicked
+}
+```
+
+### Small Button
+
+```csharp
+if (ImGui.SmallButton("Small"))
+{
+    // Compact button with less padding
+}
+```
+
+### Invisible Button
+
+```csharp
+if (ImGui.InvisibleButton("hidden", new Vector2(100, 100)))
+{
+    // Clickable area with no visual
+}
+```
+
+### Icon Buttons
+
+```csharp
+using Dalamud.Interface.Components;
+
+if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog))
+{
+    // Settings icon clicked
+}
+
+if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Save, "Save"))
+{
+    // Icon with text label
+}
+```
+
+## Input Fields
+
+### Text Input
+
+```csharp
+private string inputText = string.Empty;
+
+ImGui.InputText("Label", ref this.inputText, 100); // Max 100 characters
+```
+
+### Text Input with Hint
+
+```csharp
+ImGui.InputTextWithHint("Username", "Enter your name...", ref this.inputText, 50);
+```
+
+### Multiline Text
+
+```csharp
+private string multilineText = string.Empty;
+
+ImGui.InputTextMultiline("Notes", ref this.multilineText, 1000, new Vector2(300, 200));
+```
+
+### Numeric Input
+
+```csharp
+private int intValue = 0;
+private float floatValue = 0f;
+
+ImGui.InputInt("Integer", ref this.intValue);
+ImGui.InputFloat("Float", ref this.floatValue);
+ImGui.InputDouble("Double", ref this.doubleValue);
+```
+
+### Input with Step Buttons
+
+```csharp
+ImGui.InputInt("Count", ref this.intValue, 1, 10); // Step by 1, fast step by 10
+```
+
+## Sliders and Drag
+
+### Sliders
+
+```csharp
+private float sliderValue = 0.5f;
+private int sliderInt = 50;
+
+ImGui.SliderFloat("Volume", ref this.sliderValue, 0f, 1f);
+ImGui.SliderInt("Count", ref this.sliderInt, 0, 100);
+```
+
+### Angle Slider
+
+```csharp
+private float angle = 0f;
+
+ImGui.SliderAngle("Rotation", ref this.angle, -360f, 360f);
+```
+
+### Drag Input
+
+```csharp
+private float dragValue = 50f;
+
+ImGui.DragFloat("Value", ref this.dragValue, 0.1f, 0f, 100f);
+ImGui.DragInt("Amount", ref this.dragInt, 1, 0, 1000);
+```
+
+### Vector Inputs
+
+```csharp
+private Vector2 vec2 = Vector2.Zero;
+private Vector3 vec3 = Vector3.Zero;
+private Vector4 vec4 = Vector4.Zero;
+
+ImGui.DragFloat2("Position", ref this.vec2);
+ImGui.DragFloat3("Location", ref this.vec3);
+ImGui.DragFloat4("Color", ref this.vec4);
+```
+
+## Checkboxes and Radio Buttons
+
+### Checkbox
+
+```csharp
+private bool isEnabled = false;
+
+if (ImGui.Checkbox("Enable Feature", ref this.isEnabled))
+{
+    // Value changed
+}
+```
+
+### Radio Buttons
+
+```csharp
+private int selectedOption = 0;
+
+ImGui.RadioButton("Option 1", ref this.selectedOption, 0);
+ImGui.RadioButton("Option 2", ref this.selectedOption, 1);
+ImGui.RadioButton("Option 3", ref this.selectedOption, 2);
+```
+
+## Combo Boxes (Dropdowns)
+
+### Basic Combo
+
+```csharp
+private int selectedIndex = 0;
+private readonly string[] items = { "Item 1", "Item 2", "Item 3" };
+
+if (ImGui.BeginCombo("Select", this.items[this.selectedIndex]))
+{
+    for (int i = 0; i < this.items.Length; i++)
+    {
+        bool isSelected = this.selectedIndex == i;
+        if (ImGui.Selectable(this.items[i], isSelected))
+        {
+            this.selectedIndex = i;
+        }
+        
+        if (isSelected)
+        {
+            ImGui.SetItemDefaultFocus();
+        }
+    }
+    ImGui.EndCombo();
+}
+```
+
+### Simple Combo (Legacy)
+
+```csharp
+ImGui.Combo("Items", ref this.selectedIndex, this.items, this.items.Length);
+```
+
+## Color Pickers
+
+### Color Edit
+
+```csharp
+private Vector4 color = new Vector4(1, 1, 1, 1); // RGBA
+
+ImGui.ColorEdit4("Color", ref this.color);
+ImGui.ColorEdit3("Color (No Alpha)", ref this.colorRgb);
+```
+
+### Color Picker
+
+```csharp
+ImGui.ColorPicker4("Pick Color", ref this.color);
+```
+
+### Color Button
+
+```csharp
+if (ImGui.ColorButton("Color Preview", this.color))
+{
+    // Clicked
+}
+```
+
+## Lists and Selectables
+
+### Selectable Items
+
+```csharp
+private int selectedIndex = -1;
+private readonly string[] items = { "Apple", "Banana", "Cherry" };
+
+for (int i = 0; i < items.Length; i++)
+{
+    if (ImGui.Selectable(items[i], selectedIndex == i))
+    {
+        selectedIndex = i;
+    }
+}
+```
+
+### List Box
+
+```csharp
+if (ImGui.BeginListBox("Items", new Vector2(-1, 200)))
+{
+    for (int i = 0; i < items.Length; i++)
+    {
+        if (ImGui.Selectable(items[i], selectedIndex == i))
+        {
+            selectedIndex = i;
+        }
+    }
+    ImGui.EndListBox();
+}
+```
+
+## Layout
+
+### Same Line
+
+Place multiple items on the same line:
+
+```csharp
+ImGui.Text("Label:");
+ImGui.SameLine();
+ImGui.Button("Button");
+```
+
+### Spacing
+
+```csharp
+ImGui.Spacing();  // Add vertical space
+ImGui.NewLine();  // New line
+ImGuiHelpers.ScaledDummy(10f); // Scaled spacing
+```
+
+### Separator
+
+```csharp
+ImGui.Separator();  // Horizontal line
+```
+
+### Indent
+
+```csharp
+ImGui.Text("Normal");
+ImGui.Indent();
+ImGui.Text("Indented");
+ImGui.Unindent();
+```
+
+### Groups
+
+Group items together:
+
+```csharp
+ImGui.BeginGroup();
+ImGui.Text("Grouped");
+ImGui.Button("Items");
+ImGui.EndGroup();
+```
+
+## Columns
+
+```csharp
+ImGui.Columns(3, "mycolumns");
+ImGui.Separator();
+
+// Column 1
+ImGui.Text("Column 1");
+ImGui.NextColumn();
+
+// Column 2
+ImGui.Text("Column 2");
+ImGui.NextColumn();
+
+// Column 3
+ImGui.Text("Column 3");
+ImGui.NextColumn();
+
+ImGui.Columns(1); // Reset to single column
+```
+
+## Tables
+
+### Basic Table
+
+```csharp
+if (ImGui.BeginTable("table", 3))
+{
+    // Header
+    ImGui.TableSetupColumn("Name");
+    ImGui.TableSetupColumn("Value");
+    ImGui.TableSetupColumn("Status");
+    ImGui.TableHeadersRow();
+    
+    // Rows
+    for (int row = 0; row < 5; row++)
+    {
+        ImGui.TableNextRow();
+        
+        ImGui.TableNextColumn();
+        ImGui.Text($"Item {row}");
+        
+        ImGui.TableNextColumn();
+        ImGui.Text($"{row * 10}");
+        
+        ImGui.TableNextColumn();
+        ImGui.Text("Active");
+    }
+    
+    ImGui.EndTable();
+}
+```
+
+### Table Flags
+
+```csharp
+var flags = ImGuiTableFlags.Borders 
+          | ImGuiTableFlags.RowBg 
+          | ImGuiTableFlags.Resizable;
+          
+if (ImGui.BeginTable("table", 3, flags))
+{
+    // Table content
+    ImGui.EndTable();
+}
+```
+
+## Tree Nodes
+
+### Basic Tree
+
+```csharp
+if (ImGui.TreeNode("Parent Node"))
+{
+    ImGui.Text("Child content");
+    
+    if (ImGui.TreeNode("Nested Node"))
+    {
+        ImGui.Text("Nested content");
+        ImGui.TreePop();
+    }
+    
+    ImGui.TreePop();
+}
+```
+
+### Tree with Flags
+
+```csharp
+if (ImGui.TreeNodeEx("Node", ImGuiTreeNodeFlags.DefaultOpen))
+{
+    ImGui.Text("Content");
+    ImGui.TreePop();
+}
+```
+
+## Collapsing Headers
+
+```csharp
+if (ImGui.CollapsingHeader("Section 1"))
+{
+    ImGui.Text("Section content");
+}
+
+if (ImGui.CollapsingHeader("Section 2", ImGuiTreeNodeFlags.DefaultOpen))
+{
+    ImGui.Text("This section starts open");
+}
+```
+
+## Tooltips
+
+### Simple Tooltip
+
+```csharp
+ImGui.Button("Hover me");
+if (ImGui.IsItemHovered())
+{
+    ImGui.SetTooltip("This is a tooltip");
+}
+```
+
+### Complex Tooltip
+
+```csharp
+ImGui.Button("Complex");
+if (ImGui.IsItemHovered())
+{
+    ImGui.BeginTooltip();
+    ImGui.Text("Tooltip Title");
+    ImGui.Separator();
+    ImGui.Text("Multiple lines");
+    ImGui.Text("of content");
+    ImGui.EndTooltip();
+}
+```
+
+### Help Marker
+
+```csharp
+using Dalamud.Interface.Components;
+
+ImGui.Text("Setting");
+ImGui.SameLine();
+ImGuiComponents.HelpMarker("This is a help description");
+```
+
+## Popups and Modals
+
+### Context Menu
+
+```csharp
+ImGui.Text("Right-click me");
+if (ImGui.BeginPopupContextItem("context_menu"))
+{
+    if (ImGui.MenuItem("Copy")) { /* ... */ }
+    if (ImGui.MenuItem("Paste")) { /* ... */ }
+    ImGui.EndPopup();
+}
+```
+
+### Modal Popup
+
+```csharp
+if (ImGui.Button("Open Modal"))
+{
+    ImGui.OpenPopup("modal");
+}
+
+if (ImGui.BeginPopupModal("modal", ref isModalOpen))
+{
+    ImGui.Text("This is a modal dialog");
+    
+    if (ImGui.Button("Close"))
+    {
+        ImGui.CloseCurrentPopup();
+    }
+    ImGui.EndPopup();
+}
+```
+
+## Child Windows
+
+Create scrollable regions:
+
+```csharp
+ImGui.BeginChild("scroll_region", new Vector2(0, 300), true);
+for (int i = 0; i < 100; i++)
+{
+    ImGui.Text($"Line {i}");
+}
+ImGui.EndChild();
+```
+
+## Progress Bars
+
+```csharp
+private float progress = 0.5f;
+
+ImGui.ProgressBar(this.progress, new Vector2(-1, 0), $"{(this.progress * 100):F0}%");
+```
+
+## Styling
+
+### Push/Pop Style Colors
+
+```csharp
+ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1, 0, 0, 1));
+ImGui.Button("Red Button");
+ImGui.PopStyleColor();
+```
+
+### Push/Pop Style Variables
+
+```csharp
+ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(10, 10));
+ImGui.Button("Padded Button");
+ImGui.PopStyleVar();
+```
+
+### Using Raii Helper
+
+```csharp
+using Dalamud.Interface.Utility.Raii;
+
+using (var color = ImRaii.PushColor(ImGuiCol.Button, ImGuiColors.DalamudRed))
+{
+    ImGui.Button("Auto-popped");
+}
+```
+
+## Item Queries
+
+Check state of the last drawn item:
+
+```csharp
+ImGui.Button("Test");
+
+if (ImGui.IsItemHovered()) { /* Mouse is over item */ }
+if (ImGui.IsItemActive()) { /* Item is being held */ }
+if (ImGui.IsItemClicked()) { /* Item was clicked */ }
+if (ImGui.IsItemVisible()) { /* Item is visible */ }
+if (ImGui.IsItemEdited()) { /* Value was changed */ }
+if (ImGui.IsItemDeactivated()) { /* Item was active, now isn't */ }
+```
+
+## Best Practices
+
+<Steps>
+
+### Keep Draw Code Simple
+
+Draw functions should describe the UI, not contain complex logic.
+
+### Use Consistent Labeling
+
+Add `###id` suffixes to labels that change dynamically to maintain stable IDs.
+
+### Avoid Excessive Nesting
+
+Too many nested groups or trees can hurt performance.
+
+### Use Helpers
+
+Leverage `ImGuiComponents` and `ImGuiHelpers` from Dalamud for common patterns.
+
+### Check Return Values
+
+Many ImGui functions return `bool` to indicate interaction - use them!
+
+</Steps>
+
+## See Also
+
+- [UiBuilder](/ui/ui-builder) - Core UI interface
+- [Drawing Windows](/ui/drawing-windows) - Window management system
+- [Fonts](/ui/fonts) - Custom font usage
+- [Textures](/ui/textures) - Displaying images

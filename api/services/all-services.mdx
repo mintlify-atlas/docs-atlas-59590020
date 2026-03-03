@@ -1,0 +1,463 @@
+---
+title: All Services
+description: Complete list of all available Dalamud plugin services
+---
+
+This page provides a comprehensive list of all services available to Dalamud plugins. Services are injected via dependency injection and provide access to game functionality.
+
+## Core Services
+
+### IClientState
+Access game client state, territory information, login events, and player status.
+
+[View Documentation](/api/services/iclientstate)
+
+**Key Features:**
+- Territory and map change events
+- Login/logout events
+- PvP state detection
+- Client idle checking
+
+### IDataManager
+Access game data sheets, Excel data, and game files through Lumina.
+
+[View Documentation](/api/services/idatamanager)
+
+**Key Features:**
+- Excel sheet access
+- Game file loading
+- Multi-language data support
+- Modified file detection
+
+### IFramework
+Framework update events and task scheduling on the main thread.
+
+[View Documentation](/api/services/iframework)
+
+**Key Features:**
+- Frame update events
+- Task scheduling
+- Framework thread execution
+- Delayed execution
+
+### IPluginLog
+Structured logging service for plugins using Serilog.
+
+**Key Features:**
+- Multiple log levels (Verbose, Debug, Info, Warning, Error, Fatal)
+- Structured logging with message templates
+- Configurable minimum log level
+- Integration with Dalamud's log viewer
+
+## User Interface Services
+
+### IChatGui
+Interact with the native FFXIV chat window.
+
+[View Documentation](/api/services/ichatgui)
+
+**Key Features:**
+- Send messages to chat
+- Intercept incoming messages
+- Register custom chat link handlers
+- Chat message filtering
+
+### IGameGui
+Access game UI elements, addons, and coordinate conversion.
+
+[View Documentation](/api/services/igamegui)
+
+**Key Features:**
+- World to screen coordinate conversion
+- Screen to world coordinate conversion
+- Addon access
+- UI visibility detection
+- Hovered item/action tracking
+
+### IToastGui
+Display and intercept native toast notifications.
+
+[View Documentation](/api/services/itoastgui)
+
+**Key Features:**
+- Show normal, quest, and error toasts
+- Intercept toast messages
+- Custom toast options
+
+### INotificationManager
+Display ImGui-based notifications with rich customization.
+
+[View Documentation](/api/services/inotificationmanager)
+
+**Key Features:**
+- Multiple notification types
+- Progress indicators
+- Custom durations
+- Minimizable notifications
+
+### IAddonEventManager
+Subscribe to addon-specific events and lifecycle changes.
+
+**Key Features:**
+- Addon state change events
+- Pre/post setup hooks
+- Pre/post draw hooks
+- Event filtering by addon name
+
+### IAddonLifecycle
+Monitor addon lifecycle events for all UI elements.
+
+**Key Features:**
+- Setup/finalize events
+- Update events
+- Draw events
+- Refresh state events
+
+### IContextMenu
+Interact with and modify game context menus.
+
+**Key Features:**
+- Add custom context menu items
+- Modify existing menu items
+- Context menu event handling
+
+### IDtrBar
+Add custom information to the server info bar.
+
+**Key Features:**
+- Register custom DTR bar entries
+- Update entry text and tooltips
+- Entry visibility control
+
+### IFlyTextGui
+Create and modify flying text (damage numbers, status effects).
+
+**Key Features:**
+- Create custom fly text
+- Intercept existing fly text
+- Custom positioning and styling
+
+### INamePlateGui
+Customize nameplate appearance and behavior.
+
+**Key Features:**
+- Nameplate data manipulation
+- Custom nameplate rendering
+- Nameplate event handling
+
+### IPartyFinderGui
+Interact with the Party Finder UI.
+
+**Key Features:**
+- Party Finder listing access
+- Listing events
+- Join request handling
+
+### ITitleScreenMenu
+Add custom buttons to the title screen.
+
+**Key Features:**
+- Register title screen entries
+- Custom button actions
+- Entry ordering
+
+## Game State Services
+
+### ICondition
+Check player conditions like combat, mounted, crafting, etc.
+
+**Key Features:**
+- Condition flag checking
+- Condition change events
+- Multiple condition queries
+
+### IObjectTable
+Access spawned game objects and entities.
+
+[View Documentation](/api/services/iobjecttable)
+
+**Key Features:**
+- Iterate all game objects
+- Local player access
+- Search by ID or Entity ID
+- Object type filtering
+
+### ITargetManager
+Get and set various player targets.
+
+[View Documentation](/api/services/itargetmanager)
+
+**Key Features:**
+- Main target access
+- Focus target control
+- Mouseover target tracking
+- Soft target management
+
+### IPartyList
+Access party and alliance member information.
+
+**Key Features:**
+- Party member enumeration
+- Alliance member access
+- Party leader detection
+- Party ID tracking
+
+### IBuddyList
+Access companion (chocobo) and squadron information.
+
+**Key Features:**
+- Companion data access
+- Squadron member information
+- Pet information
+
+### IFateTable
+Access active FATE information.
+
+**Key Features:**
+- Active FATE enumeration
+- FATE details access
+- FATE progress tracking
+
+### IDutyState
+Track duty state and events.
+
+**Key Features:**
+- Duty start/complete events
+- Duty wipe detection
+- Duty recommence events
+
+### IAetheryteList
+Access aetheryte information and teleportation.
+
+**Key Features:**
+- Available aetheryte list
+- Teleportation methods
+- Aetheryte unlock status
+
+### IJobGauges
+Access job-specific gauge data.
+
+**Key Features:**
+- Job gauge access for all jobs
+- Real-time gauge updates
+- Type-safe gauge access
+
+## Input & Commands
+
+### ICommandManager
+Register and manage slash commands.
+
+[View Documentation](/api/services/icommandmanager)
+
+**Key Features:**
+- Register custom commands
+- Command dispatching
+- Help text integration
+
+### IKeyState
+Access keyboard state and key presses.
+
+[View Documentation](/api/services/ikeystate)
+
+**Key Features:**
+- Key press detection
+- Combination key checking
+- Raw key state access
+- Valid key enumeration
+
+### IGamepadState
+Access gamepad/controller state.
+
+**Key Features:**
+- Button state checking
+- Analog stick values
+- Trigger values
+- Multiple controller support
+
+## Data & Resources
+
+### ITextureProvider
+Load and create textures for ImGui rendering.
+
+**Key Features:**
+- Game icon loading
+- File texture loading
+- Custom texture creation
+- Shared texture management
+
+### ITextureReadbackProvider
+Read texture data from GPU to CPU.
+
+**Key Features:**
+- Texture data readback
+- Async readback operations
+- Multiple format support
+
+### ITextureSubstitutionProvider
+Substitute game textures with custom ones.
+
+**Key Features:**
+- Texture path substitution
+- Custom texture injection
+- Per-path overrides
+
+## Game Systems
+
+### IGameConfig
+Access and modify game configuration options.
+
+**Key Features:**
+- System config access
+- UI config access
+- Config change events
+- Config modification
+
+### IGameInventory
+Access player inventory and item operations.
+
+**Key Features:**
+- Inventory slot access
+- Item usage
+- Inventory events
+
+### IGameLifecycle
+Monitor game lifecycle events.
+
+**Key Features:**
+- Game startup events
+- Shutdown events
+- State transition events
+
+### IMarketBoard
+Access market board information.
+
+**Key Features:**
+- Market board listings
+- Purchase history
+- Current listings
+
+### IPlayerState
+Access player-specific state information.
+
+**Key Features:**
+- Player content ID
+- Territory information
+- Player flags and states
+
+### IUnlockState
+Check unlock status for various game content.
+
+**Key Features:**
+- Quest completion checking
+- Mount unlock status
+- Emote unlock status
+- Achievement checking
+
+## Advanced & Interop
+
+### IGameInteropProvider
+Create hooks for game functions.
+
+[View Documentation](/api/services/igameinteropprovider)
+
+**Key Features:**
+- Function hooking
+- Signature-based hooks
+- Import table hooks
+- Multiple hook backends
+
+### ISigScanner
+Scan memory for byte signatures.
+
+[View Documentation](/api/services/isigscanner)
+
+**Key Features:**
+- Text section scanning
+- Data section scanning
+- Module-wide scanning
+- Static address resolution
+
+### IAgentLifecycle
+Monitor agent lifecycle for UI system agents.
+
+**Key Features:**
+- Agent setup/destroy events
+- Agent show/hide events
+- Agent receive event hooks
+
+### IConsole
+Access the Dalamud developer console.
+
+**Key Features:**
+- Console output
+- Command registration
+- Console visibility
+
+### IReliableFileStorage
+Reliable file storage with atomic writes and backups.
+
+**Key Features:**
+- Atomic file operations
+- Automatic backups
+- Corruption recovery
+- Transactional writes
+
+### ISeStringEvaluator
+Evaluate and manipulate SeString expressions.
+
+**Key Features:**
+- Expression parsing
+- Expression evaluation
+- Custom expression handlers
+
+### ISelfTestRegistry
+Register self-tests for plugin diagnostics.
+
+**Key Features:**
+- Test registration
+- Test execution
+- Result reporting
+
+## Using Services
+
+Services are injected into your plugin via dependency injection:
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IClientState clientState;
+    private readonly IChatGui chatGui;
+    private readonly ICommandManager commandManager;
+    
+    public MyPlugin(
+        IClientState clientState,
+        IChatGui chatGui,
+        ICommandManager commandManager)
+    {
+        this.clientState = clientState;
+        this.chatGui = chatGui;
+        this.commandManager = commandManager;
+        
+        // Use services
+    }
+    
+    public void Dispose()
+    {
+        // Clean up service subscriptions
+    }
+}
+```
+
+## Best Practices
+
+1. **Request Only What You Need** - Only inject services your plugin actually uses
+2. **Clean Up Subscriptions** - Always unsubscribe from events in `Dispose()`
+3. **Handle Failures** - Services may return null or throw exceptions
+4. **Thread Safety** - Most services must be used from the framework thread
+5. **Check Availability** - Some services may not be available during all game states
+
+## See Also
+
+- [Services Overview](/api/services/overview) - Getting started with services
+- [Plugin Structure](/api/plugin-structure) - How to structure your plugin
+- [Dependency Injection](/api/dependency-injection) - Understanding DI in Dalamud

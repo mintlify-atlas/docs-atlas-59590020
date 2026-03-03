@@ -1,0 +1,264 @@
+---
+title: Building Dalamud
+description: Learn how to build Dalamud from source on Windows and Linux
+---
+
+This guide walks you through building Dalamud from source code. Dalamud is a plugin development framework for FFXIV with both C# and C++ components.
+
+<Note>
+If you just want to use Dalamud, you don't need to build it. Download [XIVLauncher](https://goatcorp.github.io/) instead.
+</Note>
+
+## Prerequisites
+
+### Required Software
+
+<Steps>
+  <Step title="Install .NET SDK">
+    Dalamud requires .NET 10.0 SDK or later.
+
+    Download from [https://dot.net](https://dot.net) or use the build scripts which will automatically download the required version.
+
+    The project specifies version `10.0.0` in `global.json` with `rollForward: latestMinor` and `allowPrerelease: true`.
+  </Step>
+
+  <Step title="Install Visual Studio 2022 (Windows)">
+    For Windows builds, you need Visual Studio 2022 with:
+    - C++ desktop development workload (for native components)
+    - .NET desktop development workload
+    - Windows 10 SDK
+    - Platform Toolset v143
+    - MASM (x64) for assembly files
+
+    MSBuild is required to compile the C++ projects (Dalamud.Boot, DalamudCrashHandler, and ImGui native libraries).
+  </Step>
+
+  <Step title="Install Git">
+    Git is required to clone the repository and manage submodules.
+    ```bash
+    git clone --recursive https://github.com/goatcorp/Dalamud.git
+    cd Dalamud
+    ```
+
+    The `--recursive` flag is important as Dalamud has several submodules including:
+    - FFXIVClientStructs
+    - Lumina.Excel
+    - Native ImGui libraries (cimgui, cimplot, cimguizmo)
+  </Step>
+</Steps>
+
+## Build Process
+
+### Windows
+
+Dalamud uses [NUKE](https://nuke.build/) as its build system. The build process is orchestrated through PowerShell scripts.
+
+<Steps>
+  <Step title="Run the build script">
+    Execute the build script from the repository root:
+    ```powershell
+    .\build.ps1
+    ```
+
+    This will:
+    - Auto-download the .NET SDK if not found (to `.nuke/temp/dotnet-win`)
+    - Build the NUKE build project (`build/build.csproj`)
+    - Execute the build targets
+  </Step>
+
+  <Step title="Build targets are executed">
+    The default target is `Compile`, which depends on:
+
+    1. **Restore** - Restores NuGet packages for the entire solution
+    2. **CompileImGuiNatives** - Builds C++ native libraries:
+       - `cimgui.dll` (Dear ImGui C bindings)
+       - `cimplot.dll` (ImPlot C bindings)
+       - `cimguizmo.dll` (ImGuizmo C bindings)
+    3. **CompileDalamud** - Builds `Dalamud.dll` and dependencies
+    4. **CompileDalamudBoot** - Builds `Dalamud.Boot.dll` (C++ injection loader)
+    5. **CompileDalamudCrashHandler** - Builds `DalamudCrashHandler.exe` (C++ crash handler)
+    6. **CompileInjector** - Builds `Dalamud.Injector.dll` (C# injector)
+  </Step>
+
+  <Step title="Find build output">
+    Build artifacts are placed in:
+    ```
+    bin/Debug/         # Debug builds
+    bin/Release/       # Release builds
+    ```
+
+    Output includes:
+    - Core assemblies (Dalamud.dll, Dalamud.Common.dll)
+    - Native libraries (Dalamud.Boot.dll, cimgui.dll, etc.)
+    - Dependencies (FFXIVClientStructs.dll, Lumina.dll, etc.)
+    - ImGui bindings (Dalamud.Bindings.ImGui.dll, etc.)
+  </Step>
+</Steps>
+
+### Linux
+
+Linux builds are supported for documentation generation and managed code only.
+
+<Steps>
+  <Step title="Run the build script">
+    ```bash
+    chmod +x build.sh
+    ./build.sh
+    ```
+
+    The script will:
+    - Auto-download .NET SDK if needed (to `.nuke/temp/dotnet-unix`)
+    - Build with `EnableWindowsTargeting=true` to allow targeting Windows from Linux
+    - Skip native C++ components (ImGui libraries, Dalamud.Boot)
+  </Step>
+
+  <Step title="Note on limitations">
+    Linux builds cannot compile:
+    - C++ native components (Dalamud.Boot, crash handler)
+    - ImGui native libraries (cimgui, cimplot, cimguizmo)
+
+    These targets are automatically skipped when `IsDocsBuild` is detected.
+  </Step>
+</Steps>
+
+## Build Configurations
+
+### Debug vs Release
+
+```bash
+# Debug build (default for local builds)
+./build.ps1
+
+# Release build (default for CI)
+./build.ps1 --configuration Release
+```
+
+**Debug configuration:**
+- Defines `DEBUG` and `TRACE` symbols
+- Includes debugging symbols (portable PDB)
+- No optimization
+
+**Release configuration:**
+- Enables optimizations
+- Generates version metadata from Git
+- Creates commit hash and revision files
+
+### CI Build Target
+
+The CI target builds and tests:
+```powershell
+./build.ps1 ci
+```
+
+This runs:
+1. Full compilation
+2. Unit tests via `Dalamud.Test` project (xunit v3)
+3. API compatibility checks (on PRs)
+
+## Project Structure
+
+The solution contains multiple projects:
+
+| Project | Type | Purpose |
+|---------|------|----------|
+| **Dalamud** | C# Library | Core framework, plugin API, game bindings |
+| **Dalamud.Boot** | C++ DLL | .NET Core loader, process injection |
+| **Dalamud.Injector** | C# Library | DLL injection logic |
+| **Dalamud.Common** | C# Library | Shared utilities |
+| **Dalamud.CorePlugin** | C# Plugin | Internal testbed plugin |
+| **Dalamud.Test** | C# Test | Unit tests (xunit) |
+| **DalamudCrashHandler** | C++ EXE | Crash reporting tool |
+| **FFXIVClientStructs** | C# Library | Game structure definitions (submodule) |
+| **Dalamud.Bindings.ImGui** | C# Library | ImGui C# bindings |
+| **cimgui** | C++ DLL | Dear ImGui native library |
+
+## Version Information
+
+Dalamud version is defined in `Dalamud/Dalamud.csproj`:
+```xml
+<DalamudVersion>14.0.2.2</DalamudVersion>
+```
+
+During Release builds, Git metadata is embedded:
+- Commit count (`GitCommitCount`)
+- Commit hash (`GitHash`)
+- Branch name (`GitBranch`)
+- Git describe output (`SCMVersion`)
+- FFXIVClientStructs version (`GitHashClientStructs`)
+
+## Common Build Issues
+
+<AccordionGroup>
+  <Accordion title="Missing MSBuild or C++ build tools">
+    **Error:** `MSBuild.exe not found` or C++ compilation fails
+
+    **Solution:** Install Visual Studio 2022 with C++ desktop development workload. Ensure MSBuild is in your PATH or run from Developer Command Prompt.
+  </Accordion>
+
+  <Accordion title="Submodule not initialized">
+    **Error:** Missing files in `lib/FFXIVClientStructs` or `lib/Lumina.Excel`
+
+    **Solution:**
+    ```bash
+    git submodule update --init --recursive
+    ```
+  </Accordion>
+
+  <Accordion title=".NET SDK version mismatch">
+    **Error:** `The current .NET SDK does not support targeting .NET 10.0`
+
+    **Solution:** Let the build script download the correct SDK, or manually install .NET 10.0 SDK with preview support enabled.
+  </Accordion>
+
+  <Accordion title="Platform target mismatch">
+    **Error:** Platform target 'AnyCPU' is not valid
+
+    **Solution:** Dalamud requires x64 platform. All projects target `net10.0-windows` with `PlatformTarget=x64`.
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Build Options
+
+### Clean Build
+
+Remove all build artifacts:
+```powershell
+./build.ps1 Clean
+```
+
+This cleans:
+- All project output directories
+- ImGui native libraries
+- NuGet restore cache
+- Intermediate build files
+
+### Restore Only
+
+Just restore NuGet packages:
+```powershell
+./build.ps1 Restore
+```
+
+### Build Individual Components
+
+```powershell
+# Build only Dalamud core
+./build.ps1 CompileDalamud
+
+# Build only native components
+./build.ps1 CompileImGuiNatives
+
+# Build only the injector
+./build.ps1 CompileInjector
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing" icon="flask" href="/guides/testing">
+    Learn how to run tests and validate your build
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/guides/contributing">
+    Guidelines for contributing to Dalamud
+  </Card>
+</CardGroup>

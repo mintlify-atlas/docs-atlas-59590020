@@ -1,0 +1,313 @@
+---
+title: IChatGui
+description: Interact with the native FFXIV chat UI
+---
+
+## Overview
+
+`IChatGui` handles interacting with the native chat UI. It allows plugins to send messages to chat, intercept incoming messages, and register custom chat link handlers.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Events
+
+### ChatMessage
+
+```csharp
+public event OnMessageDelegate ChatMessage;
+```
+
+Fired when a chat message is sent to chat by the game.
+
+<ParamField path="type" type="XivChatType">
+  The type of chat
+</ParamField>
+
+<ParamField path="timestamp" type="int">
+  The timestamp of when the message was sent
+</ParamField>
+
+<ParamField path="sender" type="SeString">
+  The sender name (ref parameter)
+</ParamField>
+
+<ParamField path="message" type="SeString">
+  The message sent (ref parameter)
+</ParamField>
+
+<ParamField path="isHandled" type="bool">
+  A value indicating whether the message was handled or should be propagated (ref parameter)
+</ParamField>
+
+### CheckMessageHandled
+
+```csharp
+public event OnCheckMessageHandledDelegate CheckMessageHandled;
+```
+
+Allows you to stop messages from appearing in chat by setting the isHandled parameter to true.
+
+<ParamField path="type" type="XivChatType">
+  The type of chat
+</ParamField>
+
+<ParamField path="timestamp" type="int">
+  The timestamp of when the message was sent
+</ParamField>
+
+<ParamField path="sender" type="SeString">
+  The sender name (ref parameter)
+</ParamField>
+
+<ParamField path="message" type="SeString">
+  The message sent (ref parameter)
+</ParamField>
+
+<ParamField path="isHandled" type="bool">
+  Set to true to prevent the message from appearing (ref parameter)
+</ParamField>
+
+### ChatMessageHandled
+
+```csharp
+public event OnMessageHandledDelegate ChatMessageHandled;
+```
+
+Fired when a chat message is handled by Dalamud or a plugin.
+
+<ParamField path="type" type="XivChatType">
+  The type of chat
+</ParamField>
+
+<ParamField path="timestamp" type="int">
+  The timestamp of when the message was sent
+</ParamField>
+
+<ParamField path="sender" type="SeString">
+  The sender name
+</ParamField>
+
+<ParamField path="message" type="SeString">
+  The message sent
+</ParamField>
+
+### ChatMessageUnhandled
+
+```csharp
+public event OnMessageUnhandledDelegate ChatMessageUnhandled;
+```
+
+Fired when a chat message is not handled by Dalamud or a plugin.
+
+<ParamField path="type" type="XivChatType">
+  The type of chat
+</ParamField>
+
+<ParamField path="timestamp" type="int">
+  The timestamp of when the message was sent
+</ParamField>
+
+<ParamField path="sender" type="SeString">
+  The sender name
+</ParamField>
+
+<ParamField path="message" type="SeString">
+  The message sent
+</ParamField>
+
+### LogMessage
+
+```csharp
+public event OnLogMessageDelegate LogMessage;
+```
+
+Fired when a log message (based on entries in the LogMessage sheet) is sent.
+
+<ParamField path="message" type="ILogMessage">
+  The log message
+</ParamField>
+
+## Properties
+
+### LastLinkedItemId
+
+```csharp
+public uint LastLinkedItemId { get; }
+```
+
+Gets the ID of the last linked item.
+
+<ResponseField name="LastLinkedItemId" type="uint">
+  The item ID
+</ResponseField>
+
+### LastLinkedItemFlags
+
+```csharp
+public byte LastLinkedItemFlags { get; }
+```
+
+Gets the flags of the last linked item.
+
+<ResponseField name="LastLinkedItemFlags" type="byte">
+  The item flags
+</ResponseField>
+
+### RegisteredLinkHandlers
+
+```csharp
+public IReadOnlyDictionary<(string PluginName, uint CommandId), Action<uint, SeString>> RegisteredLinkHandlers { get; }
+```
+
+Gets the dictionary of Dalamud link handlers.
+
+<ResponseField name="RegisteredLinkHandlers" type="IReadOnlyDictionary<(string, uint), Action<uint, SeString>>">
+  Dictionary of registered link handlers
+</ResponseField>
+
+## Methods
+
+### AddChatLinkHandler
+
+```csharp
+public DalamudLinkPayload AddChatLinkHandler(uint commandId, Action<uint, SeString> commandAction);
+```
+
+Registers a chat link handler.
+
+<ParamField path="commandId" type="uint" required>
+  The ID of the command
+</ParamField>
+
+<ParamField path="commandAction" type="Action<uint, SeString>" required>
+  The action to be executed
+</ParamField>
+
+<ResponseField name="return" type="DalamudLinkPayload">
+  An SeString payload for the link
+</ResponseField>
+
+### RemoveChatLinkHandler
+
+```csharp
+public void RemoveChatLinkHandler(uint commandId);
+public void RemoveChatLinkHandler();
+```
+
+Removes a chat link handler. The parameterless overload removes all chat link handlers registered by the plugin.
+
+<ParamField path="commandId" type="uint">
+  The ID of the command to remove
+</ParamField>
+
+### Print
+
+```csharp
+public void Print(XivChatEntry chat);
+public void Print(string message, string? messageTag = null, ushort? tagColor = null);
+public void Print(SeString message, string? messageTag = null, ushort? tagColor = null);
+public void Print(ReadOnlySpan<byte> message, string? messageTag = null, ushort? tagColor = null);
+```
+
+Queues a chat message. Dalamud will send queued messages on the next framework event.
+
+<ParamField path="message" type="string | SeString | ReadOnlySpan<byte> | XivChatEntry" required>
+  The message to send
+</ParamField>
+
+<ParamField path="messageTag" type="string">
+  String to prepend message with "[messageTag] "
+</ParamField>
+
+<ParamField path="tagColor" type="ushort">
+  Color to display the message tag with
+</ParamField>
+
+### PrintError
+
+```csharp
+public void PrintError(string message, string? messageTag = null, ushort? tagColor = null);
+public void PrintError(SeString message, string? messageTag = null, ushort? tagColor = null);
+public void PrintError(ReadOnlySpan<byte> message, string? messageTag = null, ushort? tagColor = null);
+```
+
+Queues an error chat message. Dalamud will send queued messages on the next framework event.
+
+<ParamField path="message" type="string | SeString | ReadOnlySpan<byte>" required>
+  The message to send
+</ParamField>
+
+<ParamField path="messageTag" type="string">
+  String to prepend message with "[messageTag] "
+</ParamField>
+
+<ParamField path="tagColor" type="ushort">
+  Color to display the message tag with
+</ParamField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IChatGui chatGui;
+    
+    public MyPlugin(IChatGui chatGui)
+    {
+        this.chatGui = chatGui;
+        
+        // Subscribe to chat messages
+        this.chatGui.ChatMessage += OnChatMessage;
+        
+        // Register a custom link handler
+        var payload = this.chatGui.AddChatLinkHandler(1, OnLinkClick);
+        
+        // Send a message with a link
+        var message = new SeStringBuilder()
+            .AddText("Click ")
+            .Add(payload)
+            .AddText("here")
+            .Add(RawPayload.LinkTerminator)
+            .AddText(" for more info")
+            .Build();
+        
+        this.chatGui.Print(message);
+    }
+    
+    private void OnChatMessage(
+        XivChatType type,
+        int timestamp,
+        ref SeString sender,
+        ref SeString message,
+        ref bool isHandled)
+    {
+        // Filter specific chat types
+        if (type == XivChatType.Say)
+        {
+            Log.Information($"{sender.TextValue} says: {message.TextValue}");
+        }
+    }
+    
+    private void OnLinkClick(uint commandId, SeString message)
+    {
+        this.chatGui.Print("Link clicked!");
+    }
+    
+    public void Dispose()
+    {
+        this.chatGui.ChatMessage -= OnChatMessage;
+        this.chatGui.RemoveChatLinkHandler();
+    }
+}
+```
+
+## Remarks
+
+- Messages are queued and sent on the next framework update
+- Always unsubscribe from events and remove link handlers in your plugin's `Dispose()` method
+- The `CheckMessageHandled` event allows you to filter messages before they appear in chat
+- SeString allows for rich formatting including colors, icons, and links

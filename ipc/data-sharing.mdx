@@ -1,0 +1,597 @@
+---
+title: Data Sharing
+description: Efficiently share data between plugins without serialization overhead
+---
+
+The DataShare system provides efficient sharing of reference-type data between plugins without the serialization overhead of CallGate. This is ideal for large, read-only data structures that multiple plugins need to access.
+
+## How Data Sharing Works
+
+DataShare uses a reference-counted caching system:
+
+1. First plugin creates the data and registers it with a unique tag
+2. Other plugins retrieve the same data instance using the tag
+3. Reference counting tracks which plugins are using the data
+4. When all plugins release the data, it's automatically removed and disposed
+
+<Note>
+  Unlike CallGate which serializes data via JSON, DataShare passes direct references to objects, making it much faster for large data structures.
+</Note>
+
+## Restrictions
+
+<Warning>
+  Data sharing only works with reference types (classes) that are loaded from shared assemblies like Dalamud itself. Types from plugin assemblies cannot be shared.
+</Warning>
+
+Valid types include:
+- Dalamud types (`ICharacter`, `IGameObject`, etc.)
+- .NET framework types (`List<T>`, `Dictionary<K,V>`, etc.)
+- Custom types in shared libraries
+
+Invalid types:
+- Types defined in plugin assemblies
+- Value types (structs)
+
+## Creating and Sharing Data
+
+### Basic Usage
+
+Create or get shared data:
+
+```csharp
+var data = this.pluginInterface.GetOrCreateData<List<string>>(
+    "MyPlugin.SharedList",
+    () =>
+    {
+        // This function only runs if data doesn't exist yet
+        return new List<string> { "Item1", "Item2", "Item3" };
+    });
+
+// Use the data
+foreach (var item in data)
+{
+    PluginLog.Information(item);
+}
+```
+
+### With Complex Types
+
+Share more complex structures:
+
+```csharp
+using System.Collections.Generic;
+using Dalamud.Game.ClientState.Objects.Types;
+
+// Note: Using IReadOnlyList for thread safety
+var targets = this.pluginInterface.GetOrCreateData<IReadOnlyList<IGameObject>>(
+    "TargetTracker.RecentTargets",
+    () =>
+    {
+        // Build initial target list
+        var list = new List<IGameObject>();
+        
+        foreach (var obj in this.objectTable)
+        {
+            if (obj is ICharacter character && character.IsValid())
+            {
+                list.Add(character);
+            }
+        }
+        
+        return list.AsReadOnly();
+    });
+```
+
+## Accessing Shared Data
+
+### GetOrCreateData
+
+Get existing data or create it if it doesn't exist:
+
+```csharp
+public T GetOrCreateData<T>(string tag, Func<T> dataGenerator) where T : class
+```
+
+This is the most common method:
+
+```csharp
+var data = this.pluginInterface.GetOrCreateData<List<int>>(
+    "MyPlugin.Numbers",
+    () => new List<int> { 1, 2, 3 });
+```
+
+### TryGetData
+
+Attempt to get existing data without creating:
+
+```csharp
+if (this.pluginInterface.TryGetData<List<string>>(
+    "OtherPlugin.SharedList",
+    out var data))
+{
+    // Data exists and was retrieved
+    PluginLog.Information($"Found {data.Count} items");
+}
+else
+{
+    // Data doesn't exist or wrong type
+    PluginLog.Information("Data not available");
+}
+```
+
+### GetData
+
+Get existing data or throw exception:
+
+```csharp
+try
+{
+    var data = this.pluginInterface.GetData<Dictionary<string, int>>(
+        "OtherPlugin.Cache");
+    
+    // Use data
+}
+catch (KeyNotFoundException)
+{
+    // Tag not registered
+}
+catch (DataCacheTypeMismatchError)
+{
+    // Type doesn't match
+}
+catch (DataCacheValueNullError)
+{
+    // Data is null
+}
+```
+
+## Releasing Shared Data
+
+Notify when you're done with shared data:
+
+```csharp
+public void Dispose()
+{
+    // Release the data share
+    this.pluginInterface.RelinquishData("MyPlugin.SharedList");
+}
+```
+
+<Warning>
+  Always call `RelinquishData` in your plugin's `Dispose` method for any data you've accessed. This allows proper cleanup when your plugin unloads.
+</Warning>
+
+## Lifecycle Management
+
+The DataShare system automatically manages data lifecycle:
+
+```csharp
+// Plugin A creates data
+var data = pluginA.GetOrCreateData<List<string>>(
+    "Shared.List",
+    () => new List<string>());
+// Reference count: 1
+
+// Plugin B accesses same data
+var sameData = pluginB.GetOrCreateData<List<string>>(
+    "Shared.List",
+    () => new List<string>()); // Generator not called
+// Reference count: 2
+// Both plugins have the same instance
+
+// Plugin A releases
+pluginA.RelinquishData("Shared.List");
+// Reference count: 1
+
+// Plugin B releases
+pluginB.RelinquishData("Shared.List");
+// Reference count: 0
+// Data is removed and disposed (if IDisposable)
+```
+
+### Automatic Disposal
+
+If your shared data implements `IDisposable`, it will be disposed automatically:
+
+```csharp
+public class DisposableCache : IDisposable
+{
+    private readonly List<IDisposable> resources = new();
+    
+    public void AddResource(IDisposable resource)
+    {
+        this.resources.Add(resource);
+    }
+    
+    public void Dispose()
+    {
+        foreach (var resource in this.resources)
+        {
+            resource.Dispose();
+        }
+        
+        PluginLog.Information("Cache disposed");
+    }
+}
+
+// Create disposable data
+var cache = this.pluginInterface.GetOrCreateData<DisposableCache>(
+    "MyPlugin.Cache",
+    () => new DisposableCache());
+
+// When all plugins call RelinquishData, Dispose() is automatically called
+```
+
+## Practical Example: Target History
+
+A complete example sharing target history between plugins:
+
+```csharp
+using System.Collections.Generic;
+using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+
+public class TargetHistoryShare : IDisposable
+{
+    private const string DataTag = "TargetHistory.RecentTargets";
+    
+    private readonly IDalamudPluginInterface pluginInterface;
+    private readonly ITargetManager targetManager;
+    private IReadOnlyList<IGameObject>? sharedData;
+    
+    public TargetHistoryShare(
+        IDalamudPluginInterface pluginInterface,
+        ITargetManager targetManager)
+    {
+        this.pluginInterface = pluginInterface;
+        this.targetManager = targetManager;
+        
+        // Create or get shared target history
+        this.sharedData = this.pluginInterface.GetOrCreateData<IReadOnlyList<IGameObject>>(
+            DataTag,
+            this.CreateInitialHistory);
+        
+        // Subscribe to target changes to update history
+        this.targetManager.Target += this.OnTargetChanged;
+    }
+    
+    private IReadOnlyList<IGameObject> CreateInitialHistory()
+    {
+        PluginLog.Information("Creating initial target history");
+        return new List<IGameObject>().AsReadOnly();
+    }
+    
+    private void OnTargetChanged(IGameObject? target)
+    {
+        if (target == null) return;
+        
+        // Update shared data
+        // Note: In practice, you'd use a more sophisticated update mechanism
+        var mutableList = new List<IGameObject>((IEnumerable<IGameObject>)this.sharedData!);
+        
+        // Add new target to history
+        if (!mutableList.Contains(target))
+        {
+            mutableList.Insert(0, target);
+            
+            // Keep only last 10 targets
+            if (mutableList.Count > 10)
+            {
+                mutableList.RemoveAt(mutableList.Count - 1);
+            }
+        }
+        
+        this.sharedData = mutableList.AsReadOnly();
+    }
+    
+    public IReadOnlyList<IGameObject> GetHistory()
+    {
+        return this.sharedData ?? new List<IGameObject>().AsReadOnly();
+    }
+    
+    public void Dispose()
+    {
+        this.targetManager.Target -= this.OnTargetChanged;
+        this.pluginInterface.RelinquishData(DataTag);
+    }
+}
+```
+
+### Consuming Shared Target History
+
+Another plugin accessing the same data:
+
+```csharp
+public class TargetHistoryConsumer : IDisposable
+{
+    private const string DataTag = "TargetHistory.RecentTargets";
+    
+    private readonly IDalamudPluginInterface pluginInterface;
+    private IReadOnlyList<IGameObject>? targetHistory;
+    
+    public TargetHistoryConsumer(IDalamudPluginInterface pluginInterface)
+    {
+        this.pluginInterface = pluginInterface;
+        
+        // Try to get existing data
+        if (!this.pluginInterface.TryGetData<IReadOnlyList<IGameObject>>(
+            DataTag,
+            out this.targetHistory))
+        {
+            PluginLog.Warning("Target history not available");
+        }
+    }
+    
+    public void DisplayHistory()
+    {
+        if (this.targetHistory == null)
+        {
+            PluginLog.Information("No target history available");
+            return;
+        }
+        
+        PluginLog.Information($"Recent targets ({this.targetHistory.Count}):");
+        
+        foreach (var target in this.targetHistory)
+        {
+            PluginLog.Information($"  - {target.Name}");
+        }
+    }
+    
+    public void Dispose()
+    {
+        if (this.targetHistory != null)
+        {
+            this.pluginInterface.RelinquishData(DataTag);
+        }
+    }
+}
+```
+
+## Error Handling
+
+### Type Mismatch
+
+Handle type mismatches gracefully:
+
+```csharp
+try
+{
+    var data = this.pluginInterface.GetOrCreateData<List<string>>(
+        "MyTag",
+        () => new List<string>());
+}
+catch (DataCacheTypeMismatchError ex)
+{
+    PluginLog.Error(
+        $"Type mismatch: Expected {ex.RequestedType.Name} but cache contains {ex.ActualType.Name}");
+}
+```
+
+### Creation Errors
+
+Handle errors during data creation:
+
+```csharp
+try
+{
+    var data = this.pluginInterface.GetOrCreateData<ExpensiveData>(
+        "MyTag",
+        () =>
+        {
+            // If this throws, GetOrCreateData will wrap it in DataCacheCreationError
+            return ExpensiveData.LoadFromFile("data.bin");
+        });
+}
+catch (DataCacheCreationError ex)
+{
+    PluginLog.Error(ex, "Failed to create shared data");
+    PluginLog.Error($"Inner exception: {ex.InnerException?.Message}");
+}
+```
+
+### Null Values
+
+Handle null data:
+
+```csharp
+try
+{
+    var data = this.pluginInterface.GetData<MyType>("MyTag");
+}
+catch (DataCacheValueNullError ex)
+{
+    PluginLog.Warning($"Data for '{ex.Tag}' is null");
+}
+```
+
+## Best Practices
+
+### Use Immutable Collections
+
+Prefer read-only collections for thread safety:
+
+```csharp
+// Good: Immutable, thread-safe
+var data = pluginInterface.GetOrCreateData<IReadOnlyList<string>>(
+    "MyPlugin.Data",
+    () => new List<string> { "A", "B" }.AsReadOnly());
+
+// Bad: Mutable, not thread-safe
+var data = pluginInterface.GetOrCreateData<List<string>>(
+    "MyPlugin.Data",
+    () => new List<string> { "A", "B" });
+```
+
+### Use Descriptive Tags
+
+Follow naming conventions:
+
+```csharp
+// Good: Clear, namespaced
+"PluginName.Feature.DataType"
+"Glamourer.Current.Equipment"
+"TargetHistory.Recent.Targets"
+
+// Bad: Ambiguous
+"data"
+"cache"
+"list1"
+```
+
+### Document Data Contracts
+
+Provide clear documentation for shared data:
+
+```csharp
+/// <summary>
+/// DataShare Tag: "MyPlugin.CachedPlayers"
+/// Type: IReadOnlyDictionary<string, PlayerInfo>
+/// 
+/// Contains cached information about recently seen players.
+/// Key: Player name
+/// Value: PlayerInfo structure
+/// 
+/// Updated every 5 seconds.
+/// Safe to access from any thread.
+/// </summary>
+public IReadOnlyDictionary<string, PlayerInfo> GetCachedPlayers()
+{
+    return this.pluginInterface.GetOrCreateData<IReadOnlyDictionary<string, PlayerInfo>>(
+        "MyPlugin.CachedPlayers",
+        this.BuildInitialCache);
+}
+```
+
+### Handle Missing Data
+
+Gracefully handle when data isn't available:
+
+```csharp
+public IReadOnlyList<IGameObject> GetSharedTargets()
+{
+    if (this.pluginInterface.TryGetData<IReadOnlyList<IGameObject>>(
+        "TargetTracker.Targets",
+        out var targets))
+    {
+        return targets;
+    }
+    
+    // Fallback to empty list
+    return new List<IGameObject>().AsReadOnly();
+}
+```
+
+### Always Relinquish
+
+Release data in `Dispose`:
+
+```csharp
+public class DataSharingPlugin : IDisposable
+{
+    private readonly List<string> dataTags = new();
+    
+    public void AccessData(string tag)
+    {
+        var data = this.pluginInterface.GetOrCreateData<MyType>(tag, () => new MyType());
+        this.dataTags.Add(tag);
+    }
+    
+    public void Dispose()
+    {
+        // Release all accessed data
+        foreach (var tag in this.dataTags)
+        {
+            this.pluginInterface.RelinquishData(tag);
+        }
+    }
+}
+```
+
+### Consider Thread Safety
+
+<Warning>
+  DataShare doesn't provide automatic thread synchronization. If multiple plugins modify shared data, implement your own locking mechanism.
+</Warning>
+
+```csharp
+public class ThreadSafeCache
+{
+    private readonly object lockObj = new();
+    private readonly Dictionary<string, int> data = new();
+    
+    public void Set(string key, int value)
+    {
+        lock (this.lockObj)
+        {
+            this.data[key] = value;
+        }
+    }
+    
+    public int Get(string key)
+    {
+        lock (this.lockObj)
+        {
+        return this.data.TryGetValue(key, out var value) ? value : 0;
+        }
+    }
+}
+```
+
+## When to Use DataShare vs CallGate
+
+### Use DataShare When:
+
+- Sharing large data structures (>1KB)
+- Data is read-only or rarely updated
+- Multiple plugins need the same data instance
+- Using Dalamud or framework types
+- Performance is critical
+
+### Use CallGate When:
+
+- Calling functions with side effects
+- Requesting computed values
+- Using plugin-specific types
+- Need request/response pattern
+- Data changes frequently
+
+## Example Comparison
+
+### CallGate Approach
+
+```csharp
+// Provider
+var provider = pluginInterface.GetIpcProvider<List<string>>("GetList");
+provider.RegisterFunc(() => this.largeList); // Serialized every call
+
+// Subscriber
+var list = subscriber.InvokeFunc(); // Deserialized every call
+```
+
+### DataShare Approach
+
+```csharp
+// Provider
+var list = pluginInterface.GetOrCreateData<IReadOnlyList<string>>(
+    "SharedList",
+    () => this.largeList.AsReadOnly()); // Shared once
+
+// Consumer
+var list = pluginInterface.TryGetData<IReadOnlyList<string>>(
+    "SharedList",
+    out var data); // Direct reference, no serialization
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CallGate Provider" icon="tower-broadcast" href="/ipc/callgate-provider">
+    Learn about RPC-style inter-plugin communication
+  </Card>
+  <Card title="IPC Overview" icon="network-wired" href="/ipc/overview">
+    Return to IPC system overview
+  </Card>
+</CardGroup>

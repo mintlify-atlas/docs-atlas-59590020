@@ -1,0 +1,182 @@
+---
+title: PluginLoadReason
+description: Enum reflecting the reasons for loading a plugin
+---
+
+## Overview
+
+`PluginLoadReason` is a flags enumeration that indicates why a plugin was loaded. This can be accessed through the `IDalamudPluginInterface.Reason` property.
+
+## Enum Definition
+
+```csharp
+[Flags]
+public enum PluginLoadReason
+{
+    Unknown = 1 << 0,
+    Installer = 1 << 1,
+    Update = 1 << 2,
+    Reload = 1 << 3,
+    Boot = 1 << 4,
+}
+```
+
+## Values
+
+<ResponseField name="Unknown" type="int" value="1">
+  The reason for loading this plugin is unknown or could not be determined.
+  
+  ```csharp
+  Unknown = 1 << 0  // 1
+  ```
+</ResponseField>
+
+<ResponseField name="Installer" type="int" value="2">
+  This plugin was loaded because it was installed through the plugin installer.
+  
+  ```csharp
+  Installer = 1 << 1  // 2
+  ```
+  
+  This occurs when a user manually installs a plugin from the plugin installer window.
+</ResponseField>
+
+<ResponseField name="Update" type="int" value="4">
+  This plugin was loaded because it was just updated.
+  
+  ```csharp
+  Update = 1 << 2  // 4
+  ```
+  
+  This occurs when a plugin is reloaded after being updated to a new version.
+</ResponseField>
+
+<ResponseField name="Reload" type="int" value="8">
+  This plugin was loaded because it was told to reload.
+  
+  ```csharp
+  Reload = 1 << 3  // 8
+  ```
+  
+  This occurs when a plugin is manually reloaded, typically during development or troubleshooting.
+</ResponseField>
+
+<ResponseField name="Boot" type="int" value="16">
+  This plugin was loaded because the game was started or Dalamud was reinjected.
+  
+  ```csharp
+  Boot = 1 << 4  // 16
+  ```
+  
+  This is the most common load reason, occurring when plugins are loaded at game startup.
+</ResponseField>
+
+## Usage
+
+Since `PluginLoadReason` is decorated with the `[Flags]` attribute, multiple reasons can be combined using bitwise operations.
+
+### Accessing the Load Reason
+
+```csharp
+using Dalamud.Plugin;
+
+public class MyPlugin : IDalamudPlugin
+{
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        var reason = pluginInterface.Reason;
+        
+        if (reason == PluginLoadReason.Boot)
+        {
+            // Plugin loaded at game startup
+        }
+        else if (reason == PluginLoadReason.Installer)
+        {
+            // Plugin was just installed
+        }
+        else if (reason == PluginLoadReason.Update)
+        {
+            // Plugin was just updated
+        }
+    }
+
+    public void Dispose() { }
+}
+```
+
+### Checking Multiple Flags
+
+```csharp
+var reason = pluginInterface.Reason;
+
+// Check if loaded for any update-related reason
+if (reason.HasFlag(PluginLoadReason.Update))
+{
+    // Handle update scenario
+}
+
+// Check for specific reason
+if (reason == PluginLoadReason.Boot)
+{
+    // Handle boot scenario
+}
+```
+
+## Common Scenarios
+
+### First-Time Installation
+
+When a user installs your plugin for the first time:
+```csharp
+if (pluginInterface.Reason == PluginLoadReason.Installer)
+{
+    // Show welcome message or tutorial
+    // Initialize first-time setup
+}
+```
+
+### After Update
+
+When your plugin is loaded after being updated:
+```csharp
+if (pluginInterface.Reason == PluginLoadReason.Update)
+{
+    // Show changelog
+    // Migrate configuration if needed
+    // Show "what's new" message
+}
+```
+
+### Normal Game Launch
+
+When the game starts normally:
+```csharp
+if (pluginInterface.Reason == PluginLoadReason.Boot)
+{
+    // Normal initialization
+    // Load saved state
+}
+```
+
+### Development/Testing
+
+When reloading during development:
+```csharp
+if (pluginInterface.Reason == PluginLoadReason.Reload)
+{
+    // Reset temporary state
+    // Reload configuration
+}
+```
+
+## Best Practices
+
+- Use the load reason to provide appropriate user feedback or initialization
+- Consider showing changelogs or welcome messages based on the load reason
+- Avoid performing expensive operations on every load reason - optimize for `Boot` which is most common
+- Handle the `Unknown` case gracefully as a fallback
+
+## Related Types
+
+- [IDalamudPluginInterface](/api/plugin/idalamudplugininterface) - Provides access to the `Reason` property
+- [IDalamudPlugin](/api/plugin/idalamudplugin) - Base plugin interface

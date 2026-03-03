@@ -1,0 +1,644 @@
+---
+title: 'ITextureProvider'
+description: 'Service that grants access to textures for rendering via ImGui'
+icon: 'image'
+---
+
+## Overview
+
+The `ITextureProvider` service grants you access to textures you may render via ImGui. It provides methods to create textures from various sources and retrieve shared textures from game resources.
+
+**Namespace:** `Dalamud.Plugin.Services`
+
+**Assembly:** Dalamud.dll
+
+<Info>
+  **Create** functions will return a new texture, and the returned instance of `IDalamudTextureWrap` must be disposed after use.
+
+  **Get** functions will return a shared texture, and the returned instance of `ISharedImmediateTexture` do not require calling `Dispose()`, unless a new reference has been created by calling `RentAsync()`.
+</Info>
+
+<Note>
+  The `debugName` parameter can be used to name your textures, to aid debugging resource leaks.
+</Note>
+
+## Create Methods
+
+These methods create new texture instances that must be disposed after use.
+
+### CreateEmpty
+
+<ResponseField name="CreateEmpty" type="IDalamudTextureWrap">
+  Creates an empty texture.
+
+  **Parameters:**
+  - `specs` (RawImageSpecification) - Texture specifications.
+  - `cpuRead` (bool) - Whether to support reading from CPU, while disabling reading from GPU.
+  - `cpuWrite` (bool) - Whether to support writing from CPU, while disabling writing from GPU.
+  - `debugName` (string?) - Name for debug display purposes.
+
+  **Returns:** A new empty texture. Dispose after use.
+
+  ```csharp
+  var specs = new RawImageSpecification
+  {
+      Width = 256,
+      Height = 256,
+      DxgiFormat = 28 // DXGI_FORMAT_R8G8B8A8_UNORM
+  };
+  var texture = textureProvider.CreateEmpty(specs, false, true, "MyEmptyTexture");
+  ```
+</ResponseField>
+
+### CreateDrawListTexture
+
+<ResponseField name="CreateDrawListTexture" type="IDrawListTextureWrap">
+  Creates a texture that can be drawn from an `ImDrawList` or an `ImDrawData`.
+
+  **Parameters:**
+  - `debugName` (string?) - Name for debug display purposes.
+
+  **Returns:** A new draw list texture. Dispose after use.
+
+  <Note>
+    No new resource is allocated upfront; it will be done when `IDrawListTextureWrap.Size` is set with positive values for both components.
+  </Note>
+
+  ```csharp
+  var drawListTexture = textureProvider.CreateDrawListTexture("MyDrawListTexture");
+  ```
+</ResponseField>
+
+### CreateFromExistingTextureAsync
+
+<ResponseField name="CreateFromExistingTextureAsync" type="Task<IDalamudTextureWrap>">
+  Creates a texture from the given existing texture, cropping and converting pixel format as needed.
+
+  **Parameters:**
+  - `wrap` (IDalamudTextureWrap) - The source texture wrap. The passed value may be disposed once this function returns, without having to wait for the completion of the returned `Task`.
+  - `args` (TextureModificationArgs) - The texture modification arguments. Default: `default`
+  - `leaveWrapOpen` (bool) - Whether to leave `wrap` non-disposed when the returned `Task` completes. Default: `false`
+  - `debugName` (string?) - Name for debug display purposes.
+  - `cancellationToken` (CancellationToken) - The cancellation token.
+
+  **Returns:** A `Task` containing the copied texture on success. Dispose after use.
+
+  <Warning>
+    This function may throw an exception.
+  </Warning>
+
+  ```csharp
+  var croppedTexture = await textureProvider.CreateFromExistingTextureAsync(
+      sourceTexture,
+      new TextureModificationArgs { /* crop parameters */ },
+      debugName: "CroppedTexture");
+  ```
+</ResponseField>
+
+### CreateFromImGuiViewportAsync
+
+<ResponseField name="CreateFromImGuiViewportAsync" type="Task<IDalamudTextureWrap>">
+  Creates a texture from an ImGui viewport.
+
+  **Parameters:**
+  - `args` (ImGuiViewportTextureArgs) - The arguments for creating a texture.
+  - `debugName` (string?) - Name for debug display purposes.
+  - `cancellationToken` (CancellationToken) - The cancellation token.
+
+  **Returns:** A `Task` containing the copied texture on success. Dispose after use.
+
+  <Info>
+    Use `ImGui.GetMainViewport().ID` to capture the game screen with Dalamud rendered.
+  </Info>
+
+  <Warning>
+    This function may throw an exception.
+  </Warning>
+
+  ```csharp
+  var viewportTexture = await textureProvider.CreateFromImGuiViewportAsync(
+      new ImGuiViewportTextureArgs
+      {
+          ViewportId = ImGui.GetMainViewport().ID
+      },
+      debugName: "ScreenCapture");
+  ```
+</ResponseField>
+
+### CreateFromImageAsync
+
+<ResponseField name="CreateFromImageAsync" type="Task<IDalamudTextureWrap>">
+  Gets a texture from the given bytes or stream, trying to interpret it as a .tex file or other well-known image files, such as .png.
+
+  **Overloads:**
+
+  **From bytes:**
+  - `bytes` (ReadOnlyMemory\<byte\>) - The bytes to load.
+  - `debugName` (string?) - Name for debug display purposes.
+  - `cancellationToken` (CancellationToken) - The cancellation token.
+
+  **From stream:**
+  - `stream` (Stream) - The stream to load data from.
+  - `leaveOpen` (bool) - Whether to leave the stream open once the task completes. Default: `false`
+  - `debugName` (string?) - Name for debug display purposes.
+  - `cancellationToken` (CancellationToken) - The cancellation token.
+
+  **Returns:** A `Task` containing the loaded texture on success. Dispose after use.
+
+  <Warning>
+    This function may throw an exception.
+  </Warning>
+
+  ```csharp
+  // From bytes
+  var imageBytes = await File.ReadAllBytesAsync("image.png");
+  var texture = await textureProvider.CreateFromImageAsync(imageBytes, "MyImage");
+
+  // From stream
+  using var stream = File.OpenRead("image.png");
+  var texture2 = await textureProvider.CreateFromImageAsync(stream, false, "MyImage2");
+  ```
+</ResponseField>
+
+### CreateFromRaw / CreateFromRawAsync
+
+<ResponseField name="CreateFromRaw" type="IDalamudTextureWrap">
+  Gets a texture from the given bytes, interpreting it as a raw bitmap.
+
+  **Parameters:**
+  - `specs` (RawImageSpecification) - The specifications for the raw bitmap.
+  - `bytes` (ReadOnlySpan\<byte\> or ReadOnlyMemory\<byte\>) - The bytes to load.
+  - `debugName` (string?) - Name for debug display purposes.
+
+  **Async overload also accepts:**
+  - `stream` (Stream) - The stream to load data from.
+  - `leaveOpen` (bool) - Whether to leave the stream open once the task completes.
+  - `cancellationToken` (CancellationToken) - The cancellation token.
+
+  **Returns:** The texture loaded from the supplied raw bitmap. Dispose after use.
+
+  <Warning>
+    This function may throw an exception.
+  </Warning>
+
+  ```csharp
+  var specs = new RawImageSpecification
+  {
+      Width = 256,
+      Height = 256,
+      DxgiFormat = 28 // DXGI_FORMAT_R8G8B8A8_UNORM
+  };
+  var rawBytes = GetRawImageData();
+  var texture = textureProvider.CreateFromRaw(specs, rawBytes, "RawImage");
+  ```
+</ResponseField>
+
+### CreateFromTexFile / CreateFromTexFileAsync
+
+<ResponseField name="CreateFromTexFile" type="IDalamudTextureWrap">
+  Get a texture handle for the specified Lumina `TexFile`.
+
+  **Parameters:**
+  - `file` (TexFile) - The texture to obtain a handle to.
+  - `debugName` (string?) - Name for debug display purposes (async only).
+  - `cancellationToken` (CancellationToken) - The cancellation token (async only).
+
+  **Returns:** A texture wrap that can be used to render the texture. Dispose after use.
+
+  <Info>
+    `CreateFromTexFile` is an alias for fetching `Task.Result` from `CreateFromTexFileAsync`.
+  </Info>
+
+  <Warning>
+    This function may throw an exception.
+  </Warning>
+
+  ```csharp
+  var texFile = dataManager.GetFile<TexFile>("ui/icon/000000/000001.tex");
+  var texture = await textureProvider.CreateFromTexFileAsync(texFile, "GameIcon");
+  ```
+</ResponseField>
+
+### CreateFromClipboardAsync
+
+<ResponseField name="CreateFromClipboardAsync" type="Task<IDalamudTextureWrap>">
+  Creates a texture from clipboard.
+
+  **Parameters:**
+  - `debugName` (string?) - Name for debug display purposes.
+  - `cancellationToken` (CancellationToken) - The cancellation token.
+
+  **Returns:** A `Task` containing the texture from clipboard.
+
+  ```csharp
+  if (textureProvider.HasClipboardImage())
+  {
+      var texture = await textureProvider.CreateFromClipboardAsync("ClipboardImage");
+  }
+  ```
+</ResponseField>
+
+### CreateTextureFromSeString
+
+<ResponseField name="CreateTextureFromSeString" type="IDalamudTextureWrap">
+  Creates a texture by drawing a SeString onto it.
+
+  **Parameters:**
+  - `text` (ReadOnlySpan\<byte\>) - SeString to render.
+  - `drawParams` (in SeStringDrawParams) - Parameters for drawing. Default: `default`
+  - `debugName` (string?) - Name for debug display purposes.
+
+  **Returns:** The new texture.
+
+  <Warning>
+    Can only be used from the main thread.
+  </Warning>
+
+  ```csharp
+  var seString = GetSeString();
+  var texture = textureProvider.CreateTextureFromSeString(
+      seString,
+      new SeStringDrawParams { /* drawing params */ },
+      "SeStringTexture");
+  ```
+</ResponseField>
+
+## Get Methods (Shared Textures)
+
+These methods return shared textures that do not need to be disposed (unless you call `RentAsync()`).
+
+### GetFromGameIcon
+
+<ResponseField name="GetFromGameIcon" type="ISharedImmediateTexture">
+  Gets a shared texture corresponding to the given game resource icon specifier.
+
+  **Parameters:**
+  - `lookup` (in GameIconLookup) - A game icon specifier.
+
+  **Returns:** The shared texture that you may use to obtain the loaded texture wrap and load states.
+
+  <Info>
+    This function is under the effect of `ITextureSubstitutionProvider.GetSubstitutedPath`.
+  </Info>
+
+  <Note>
+    Caching the returned object is not recommended. Performance benefit will be minimal.
+  </Note>
+
+  ```csharp
+  var iconTexture = textureProvider.GetFromGameIcon(new GameIconLookup(1));
+  
+  if (iconTexture.TryGetWrap(out var texture, out var exception))
+  {
+      ImGui.Image(texture.ImGuiHandle, new Vector2(32, 32));
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="TryGetFromGameIcon" type="bool">
+  Gets a shared texture corresponding to the given game resource icon specifier.
+
+  **Parameters:**
+  - `lookup` (in GameIconLookup) - A game icon specifier.
+  - `texture` (out ISharedImmediateTexture?) - The resulting `ISharedImmediateTexture`.
+
+  **Returns:** Whether the lookup succeeded.
+
+  <Info>
+    This function does not throw exceptions.
+  </Info>
+
+  ```csharp
+  if (textureProvider.TryGetFromGameIcon(new GameIconLookup(1), out var iconTexture))
+  {
+      var wrap = iconTexture.GetWrapOrEmpty();
+      ImGui.Image(wrap.ImGuiHandle, new Vector2(32, 32));
+  }
+  ```
+</ResponseField>
+
+### GetFromGame
+
+<ResponseField name="GetFromGame" type="ISharedImmediateTexture">
+  Gets a shared texture corresponding to the given path to a game resource.
+
+  **Parameters:**
+  - `path` (string) - A path to a game resource.
+
+  **Returns:** The shared texture that you may use to obtain the loaded texture wrap and load states.
+
+  <Info>
+    This function is under the effect of `ITextureSubstitutionProvider.GetSubstitutedPath`.
+  </Info>
+
+  <Note>
+    This function does not throw exceptions. Caching the returned object is not recommended.
+  </Note>
+
+  ```csharp
+  var texture = textureProvider.GetFromGame("ui/icon/000000/000001_hr1.tex");
+  var wrap = texture.GetWrapOrEmpty();
+  ImGui.Image(wrap.ImGuiHandle, new Vector2(64, 64));
+  ```
+</ResponseField>
+
+### GetFromFile
+
+<ResponseField name="GetFromFile" type="ISharedImmediateTexture">
+  Gets a shared texture corresponding to the given file on the filesystem.
+
+  **Overloads:**
+  - `path` (string) - A path to a file on the filesystem.
+  - `file` (FileInfo) - The file on the filesystem to load.
+
+  **Returns:** The shared texture that you may use to obtain the loaded texture wrap and load states.
+
+  <Note>
+    This function does not throw exceptions. Caching the returned object is not recommended.
+  </Note>
+
+  ```csharp
+  var texture = textureProvider.GetFromFile("/path/to/image.png");
+  var wrap = texture.GetWrapOrEmpty();
+  ImGui.Image(wrap.ImGuiHandle, new Vector2(64, 64));
+  ```
+</ResponseField>
+
+### GetFromFileAbsolute
+
+<ResponseField name="GetFromFileAbsolute" type="ISharedImmediateTexture">
+  Gets a shared texture corresponding to the given file on the filesystem.
+
+  **Parameters:**
+  - `fullPath` (string) - The file on the filesystem to load. Requires a full path.
+
+  **Returns:** The shared texture that you may use to obtain the loaded texture wrap and load states.
+
+  <Note>
+    This function does not throw exceptions. Caching the returned object is not recommended.
+  </Note>
+
+  ```csharp
+  var texture = textureProvider.GetFromFileAbsolute("C:\\full\\path\\to\\image.png");
+  ```
+</ResponseField>
+
+### GetFromManifestResource
+
+<ResponseField name="GetFromManifestResource" type="ISharedImmediateTexture">
+  Gets a shared texture corresponding to the given file of the assembly manifest resources.
+
+  **Parameters:**
+  - `assembly` (Assembly) - The assembly containing manifest resources.
+  - `name` (string) - The case-sensitive name of the manifest resource being requested.
+
+  **Returns:** The shared texture that you may use to obtain the loaded texture wrap and load states.
+
+  <Note>
+    This function does not throw exceptions. Caching the returned object is not recommended.
+  </Note>
+
+  ```csharp
+  var texture = textureProvider.GetFromManifestResource(
+      Assembly.GetExecutingAssembly(),
+      "MyPlugin.Resources.icon.png");
+  ```
+</ResponseField>
+
+## Utility Methods
+
+### GetIconPath / TryGetIconPath
+
+<ResponseField name="GetIconPath" type="string">
+  Get a path for a specific icon's .tex file.
+
+  **Parameters:**
+  - `lookup` (in GameIconLookup) - The icon lookup.
+
+  **Returns:** The path to the icon.
+
+  **Throws:** `FileNotFoundException` if a corresponding file could not be found.
+
+  ```csharp
+  var iconPath = textureProvider.GetIconPath(new GameIconLookup(1));
+  Console.WriteLine($"Icon path: {iconPath}");
+  ```
+</ResponseField>
+
+<ResponseField name="TryGetIconPath" type="bool">
+  Gets the path of an icon.
+
+  **Parameters:**
+  - `lookup` (in GameIconLookup) - The icon lookup.
+  - `path` (out string?) - The resolved path.
+
+  **Returns:** `true` if the corresponding file exists and `path` has been set.
+
+  <Note>
+    This function does not throw exceptions.
+  </Note>
+
+  ```csharp
+  if (textureProvider.TryGetIconPath(new GameIconLookup(1), out var path))
+  {
+      Console.WriteLine($"Icon path: {path}");
+  }
+  ```
+</ResponseField>
+
+### HasClipboardImage
+
+<ResponseField name="HasClipboardImage" type="bool">
+  Gets a value indicating whether the current desktop clipboard contains an image that can be attempted to read using `CreateFromClipboardAsync()`.
+
+  **Returns:** `true` if it is the case.
+
+  ```csharp
+  if (textureProvider.HasClipboardImage())
+  {
+      var texture = await textureProvider.CreateFromClipboardAsync();
+  }
+  ```
+</ResponseField>
+
+### GetSupportedImageDecoderInfos
+
+<ResponseField name="GetSupportedImageDecoderInfos" type="IEnumerable<IBitmapCodecInfo>">
+  Gets the supported bitmap decoders.
+
+  **Returns:** The supported bitmap decoders.
+
+  The following functions support the files of the container types pointed by yielded values:
+  - `GetFromFile`
+  - `GetFromManifestResource`
+  - `CreateFromImageAsync`
+
+  <Warning>
+    This function may throw an exception.
+  </Warning>
+
+  ```csharp
+  var decoders = textureProvider.GetSupportedImageDecoderInfos();
+  foreach (var decoder in decoders)
+  {
+      Console.WriteLine($"Supported format: {decoder.FriendlyName}");
+  }
+  ```
+</ResponseField>
+
+### IsDxgiFormatSupported
+
+<ResponseField name="IsDxgiFormatSupported" type="bool">
+  Determines whether the system supports the given DXGI format. For use with `RawImageSpecification.DxgiFormat`.
+
+  **Parameters:**
+  - `dxgiFormat` (int) - The DXGI format.
+
+  **Returns:** `true` if supported.
+
+  <Note>
+    This function does not throw exceptions.
+  </Note>
+
+  ```csharp
+  if (textureProvider.IsDxgiFormatSupported(28)) // DXGI_FORMAT_R8G8B8A8_UNORM
+  {
+      // Format is supported
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="IsDxgiFormatSupportedForCreateFromExistingTextureAsync" type="bool">
+  Determines whether the system supports the given DXGI format for use with `CreateFromExistingTextureAsync`.
+
+  **Parameters:**
+  - `dxgiFormat` (int) - The DXGI format.
+
+  **Returns:** `true` if supported.
+
+  <Note>
+    This function does not throw exceptions.
+  </Note>
+</ResponseField>
+
+### ConvertToKernelTexture
+
+<ResponseField name="ConvertToKernelTexture" type="nint">
+  Converts an existing `IDalamudTextureWrap` instance to a new instance of `FFXIVClientStructs.FFXIV.Client.Graphics.Kernel.Texture` which can be used to supply a custom texture onto an in-game addon (UI element).
+
+  **Parameters:**
+  - `wrap` (IDalamudTextureWrap) - Instance of `IDalamudTextureWrap` to convert.
+  - `leaveWrapOpen` (bool) - Whether to leave `wrap` non-disposed when the returned `Task` completes. Default: `false`
+
+  **Returns:** Address of the new `FFXIVClientStructs.FFXIV.Client.Graphics.Kernel.Texture`.
+
+  <Warning>
+    If the returned kernel texture is to be destroyed, call the fourth function in its vtable, by calling `FFXIVClientStructs.FFXIV.Client.Graphics.Kernel.Texture.DecRef()` or `((delegate* unmanaged<nint, void>)(*(nint**)ptr)[3](ptr)`.
+  </Warning>
+
+  ```csharp
+  var kernelTexturePtr = textureProvider.ConvertToKernelTexture(myTexture);
+  // Use with in-game UI element
+  ```
+</ResponseField>
+
+## Usage Example
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly ITextureProvider textureProvider;
+    private ISharedImmediateTexture? iconTexture;
+    private IDalamudTextureWrap? customTexture;
+
+    public MyPlugin(
+        IDalamudPluginInterface pluginInterface,
+        ITextureProvider textureProvider)
+    {
+        this.textureProvider = textureProvider;
+        
+        // Get a shared game icon texture
+        this.iconTexture = textureProvider.GetFromGameIcon(new GameIconLookup(66001));
+        
+        // Load a custom texture from plugin directory
+        var imagePath = Path.Combine(
+            pluginInterface.AssemblyLocation.Directory!.FullName,
+            "icon.png");
+        
+        Task.Run(async () =>
+        {
+            var imageBytes = await File.ReadAllBytesAsync(imagePath);
+            this.customTexture = await textureProvider.CreateFromImageAsync(
+                imageBytes,
+                "MyPluginIcon");
+        });
+    }
+
+    public void DrawUI()
+    {
+        ImGui.Begin("Texture Example");
+
+        // Draw shared game icon
+        if (iconTexture?.TryGetWrap(out var wrap, out _) == true)
+        {
+            ImGui.Image(wrap.ImGuiHandle, new Vector2(32, 32));
+            ImGui.SameLine();
+            ImGui.Text("Game Icon");
+        }
+
+        // Draw custom texture
+        if (customTexture != null)
+        {
+            ImGui.Image(customTexture.ImGuiHandle, new Vector2(32, 32));
+            ImGui.SameLine();
+            ImGui.Text("Custom Icon");
+        }
+
+        ImGui.End();
+    }
+
+    public void Dispose()
+    {
+        // Only dispose created textures, not shared ones
+        customTexture?.Dispose();
+    }
+}
+```
+
+## Related Types
+
+### ISharedImmediateTexture
+
+A texture with a backing instance of `IDalamudTextureWrap` that is shared across multiple requesters.
+
+**Key Methods:**
+- `GetWrapOrEmpty()` - Gets the texture for use with the current frame, or an empty texture if unavailable.
+- `GetWrapOrDefault(defaultWrap)` - Gets the texture or a specified default.
+- `TryGetWrap(out texture, out exception)` - Attempts to get the texture for use with the current frame.
+- `RentAsync(cancellationToken)` - Creates a new instance holding a new reference. Must be disposed.
+
+<Warning>
+  Use `GetWrapOrEmpty()` and `TryGetWrap()` for the current frame only. Use `RentAsync()` to lock the texture for use in any thread for any duration.
+</Warning>
+
+```csharp
+// Recommended: Use for current frame only
+var texture = sharedTexture.GetWrapOrEmpty();
+ImGui.Image(texture.ImGuiHandle, new Vector2(32, 32));
+
+// Alternative: Rent for longer use (must dispose)
+var rentedTexture = await sharedTexture.RentAsync();
+try
+{
+    // Use rentedTexture
+}
+finally
+{
+    rentedTexture.Dispose();
+}
+```
+
+## See Also
+
+- [IUiBuilder](/api/interface/iuibuilder) - UI builder interface
+- [Texture Guide](/ui/textures) - Guide on using textures in Dalamud

@@ -1,0 +1,262 @@
+---
+title: ITargetManager
+description: Get and set various player targets
+---
+
+## Overview
+
+`ITargetManager` allows you to get and set various kinds of targets for the player, including the main target, mouseover target, focus target, and more.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Properties
+
+### Target
+
+```csharp
+public IGameObject? Target { get; set; }
+```
+
+Gets or sets the current target. Set to null to clear the target.
+
+<ResponseField name="Target" type="IGameObject?">
+  The current target object, or null if no target
+</ResponseField>
+
+### MouseOverTarget
+
+```csharp
+public IGameObject? MouseOverTarget { get; set; }
+```
+
+Gets or sets the mouseover target. Set to null to clear the target.
+
+<ResponseField name="MouseOverTarget" type="IGameObject?">
+  The mouseover target object, or null if no mouseover
+</ResponseField>
+
+### FocusTarget
+
+```csharp
+public IGameObject? FocusTarget { get; set; }
+```
+
+Gets or sets the focus target. Set to null to clear the target.
+
+<ResponseField name="FocusTarget" type="IGameObject?">
+  The focus target object, or null if no focus target
+</ResponseField>
+
+### PreviousTarget
+
+```csharp
+public IGameObject? PreviousTarget { get; set; }
+```
+
+Gets or sets the previous target. Set to null to clear the target.
+
+<ResponseField name="PreviousTarget" type="IGameObject?">
+  The previous target object, or null if none
+</ResponseField>
+
+### SoftTarget
+
+```csharp
+public IGameObject? SoftTarget { get; set; }
+```
+
+Gets or sets the soft target. Set to null to clear the target.
+
+<ResponseField name="SoftTarget" type="IGameObject?">
+  The soft target object, or null if no soft target
+</ResponseField>
+
+### GPoseTarget
+
+```csharp
+public IGameObject? GPoseTarget { get; set; }
+```
+
+Gets or sets the gpose target. Set to null to clear the target.
+
+<ResponseField name="GPoseTarget" type="IGameObject?">
+  The gpose target object, or null if no gpose target
+</ResponseField>
+
+### MouseOverNameplateTarget
+
+```csharp
+public IGameObject? MouseOverNameplateTarget { get; set; }
+```
+
+Gets or sets the mouseover nameplate target. Set to null to clear the target.
+
+<ResponseField name="MouseOverNameplateTarget" type="IGameObject?">
+  The mouseover nameplate target object, or null if none
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly ITargetManager targetManager;
+    private readonly IObjectTable objectTable;
+    
+    public MyPlugin(
+        ITargetManager targetManager,
+        IObjectTable objectTable)
+    {
+        this.targetManager = targetManager;
+        this.objectTable = objectTable;
+    }
+    
+    public void CheckCurrentTarget()
+    {
+        var target = this.targetManager.Target;
+        
+        if (target != null)
+        {
+            Log.Information($"Current target: {target.Name} (ID: {target.EntityId})");
+            Log.Information($"Position: {target.Position}");
+            
+            if (target is IBattleChara battleChara)
+            {
+                Log.Information($"HP: {battleChara.CurrentHp}/{battleChara.MaxHp}");
+            }
+        }
+        else
+        {
+            Log.Information("No target");
+        }
+    }
+    
+    public void SetTargetByName(string name)
+    {
+        foreach (var obj in this.objectTable)
+        {
+            if (obj.Name.TextValue.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                this.targetManager.Target = obj;
+                Log.Information($"Targeted: {obj.Name}");
+                return;
+            }
+        }
+        
+        Log.Warning($"Could not find object named: {name}");
+    }
+    
+    public void ClearAllTargets()
+    {
+        this.targetManager.Target = null;
+        this.targetManager.FocusTarget = null;
+        this.targetManager.SoftTarget = null;
+        Log.Information("Cleared all targets");
+    }
+    
+    public void CheckMouseover()
+    {
+        var mouseover = this.targetManager.MouseOverTarget;
+        
+        if (mouseover != null)
+        {
+            Log.Information($"Mouse over: {mouseover.Name}");
+        }
+    }
+}
+```
+
+## Advanced Usage
+
+### Target Cycling
+
+```csharp
+public void CycleTargets()
+{
+    var currentTarget = this.targetManager.Target;
+    
+    // Store current as previous
+    if (currentTarget != null)
+    {
+        this.targetManager.PreviousTarget = currentTarget;
+    }
+    
+    // Find next valid target
+    var found = false;
+    foreach (var obj in this.objectTable)
+    {
+        if (obj.ObjectKind == ObjectKind.BattleNpc && obj != currentTarget)
+        {
+            this.targetManager.Target = obj;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found)
+    {
+        this.targetManager.Target = null;
+    }
+}
+```
+
+### Focus Target Management
+
+```csharp
+public void ManageFocusTarget()
+{
+    var currentTarget = this.targetManager.Target;
+    var focusTarget = this.targetManager.FocusTarget;
+    
+    if (currentTarget != null && focusTarget == null)
+    {
+        // Set current target as focus
+        this.targetManager.FocusTarget = currentTarget;
+        Log.Information($"Set focus target: {currentTarget.Name}");
+    }
+    else if (focusTarget != null)
+    {
+        // Clear focus target
+        this.targetManager.FocusTarget = null;
+        Log.Information("Cleared focus target");
+    }
+}
+```
+
+### Monitoring Target Changes
+
+```csharp
+private IGameObject? lastTarget;
+
+public void OnFrameworkUpdate()
+{
+    var currentTarget = this.targetManager.Target;
+    
+    if (currentTarget != this.lastTarget)
+    {
+        if (currentTarget != null)
+        {
+            Log.Information($"Target changed to: {currentTarget.Name}");
+        }
+        else
+        {
+            Log.Information("Target cleared");
+        }
+        
+        this.lastTarget = currentTarget;
+    }
+}
+```
+
+## Remarks
+
+- Target properties return `IGameObject` which can be cast to more specific types like `IPlayerCharacter` or `IBattleChara`
+- Setting a target to null clears that target slot
+- The `SoftTarget` is the target shown when using gamepad/controller targeting
+- `MouseOverTarget` reflects what the mouse cursor is currently over
+- `GPoseTarget` is only relevant when in Group Pose mode
+- Target objects may become invalid if the entity despawns or moves out of range

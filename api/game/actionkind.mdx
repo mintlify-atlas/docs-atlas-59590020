@@ -1,0 +1,239 @@
+---
+title: 'ActionKind'
+description: 'Enum describing possible action kinds'
+---
+
+## Overview
+
+The `ActionKind` enum represents the different types of actions available in FFXIV. This enum is used to categorize various player abilities, items, commands, and other executable actions within the game.
+
+**Namespace:** `Dalamud.Game`
+
+## Enum Values
+
+### Trait
+
+A Trait.
+
+**Value:** `0`
+
+```csharp
+ActionKind.Trait
+```
+
+### Action
+
+An Action.
+
+**Value:** `1`
+
+```csharp
+ActionKind.Action
+```
+
+### Item
+
+A usable Item.
+
+**Value:** `2`
+
+<Note>
+This action kind may not work in all contexts.
+</Note>
+
+```csharp
+ActionKind.Item
+```
+
+### EventItem
+
+A usable EventItem.
+
+**Value:** `3`
+
+<Note>
+This action kind may not work in all contexts.
+</Note>
+
+```csharp
+ActionKind.EventItem
+```
+
+### EventAction
+
+An EventAction.
+
+**Value:** `4`
+
+```csharp
+ActionKind.EventAction
+```
+
+### GeneralAction
+
+A GeneralAction.
+
+**Value:** `5`
+
+```csharp
+ActionKind.GeneralAction
+```
+
+### BuddyAction
+
+A BuddyAction.
+
+**Value:** `6`
+
+```csharp
+ActionKind.BuddyAction
+```
+
+### MainCommand
+
+A MainCommand.
+
+**Value:** `7`
+
+```csharp
+ActionKind.MainCommand
+```
+
+### Companion
+
+A Companion.
+
+**Value:** `8`
+
+<Note>
+This action kind status is unresolved.
+</Note>
+
+```csharp
+ActionKind.Companion
+```
+
+### CraftAction
+
+A CraftAction.
+
+**Value:** `9`
+
+```csharp
+ActionKind.CraftAction
+```
+
+### Action2
+
+An Action (again).
+
+**Value:** `10`
+
+<Note>
+The difference between this and the standard Action (value 1) is unclear.
+</Note>
+
+```csharp
+ActionKind.Action2
+```
+
+### PetAction
+
+A PetAction.
+
+**Value:** `11`
+
+```csharp
+ActionKind.PetAction
+```
+
+### CompanyAction
+
+A CompanyAction.
+
+**Value:** `12`
+
+```csharp
+ActionKind.CompanyAction
+```
+
+### Mount
+
+A Mount.
+
+**Value:** `13`
+
+```csharp
+ActionKind.Mount
+```
+
+### BgcArmyAction
+
+A BgcArmyAction.
+
+**Value:** `19`
+
+<Note>
+Values 14-18 are unused in the enum definition.
+</Note>
+
+```csharp
+ActionKind.BgcArmyAction
+```
+
+### Ornament
+
+An Ornament.
+
+**Value:** `20`
+
+```csharp
+ActionKind.Ornament
+```
+
+## Usage Example
+
+```csharp
+using Dalamud.Game;
+
+// Use action kind to categorize actions
+public void ExecuteAction(uint actionId, ActionKind kind)
+{
+    switch (kind)
+    {
+        case ActionKind.Action:
+            // Execute a standard action
+            break;
+        case ActionKind.Item:
+            // Use an item
+            break;
+        case ActionKind.Mount:
+            // Mount up
+            break;
+        case ActionKind.CraftAction:
+            // Perform crafting action
+            break;
+        default:
+            // Handle other action types
+            break;
+    }
+}
+
+// Check if an action is a specific kind
+if (actionKind == ActionKind.GeneralAction)
+{
+    // Handle general actions
+}
+```
+
+## Notes
+
+- Some action kinds (Item, EventItem) have noted compatibility issues and may not work in all contexts
+- Values 14-18 are not defined in the enum and are unused
+- The difference between Action (1) and Action2 (10) is not well documented
+- The Companion action kind (8) has unresolved functionality
+
+## Related Types
+
+- Action sheets in the game data that use these kind identifiers
+- Action execution systems that require kind classification

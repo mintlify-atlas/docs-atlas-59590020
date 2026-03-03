@@ -1,0 +1,259 @@
+---
+title: 'ICallGateProvider'
+description: 'The provider (server) half of an IPC channel for exposing methods to other plugins'
+---
+
+The `ICallGateProvider` interface is used to expose methods to other plugins via RPC (Remote Procedure Call), as well as to allow other plugins to subscribe to notifications from this plugin. This is the server-side interface for inter-plugin communication.
+
+## Interface Hierarchy
+
+The `ICallGateProvider` interface has multiple generic variants to support different numbers of parameters:
+
+- `ICallGateProvider` - Base interface with common functionality
+- `ICallGateProvider<TRet>` - No parameters
+- `ICallGateProvider<T1, TRet>` - One parameter
+- `ICallGateProvider<T1, T2, TRet>` - Two parameters
+- `ICallGateProvider<T1, T2, T3, TRet>` - Three parameters
+- `ICallGateProvider<T1, T2, T3, T4, TRet>` - Four parameters
+- `ICallGateProvider<T1, T2, T3, T4, T5, TRet>` - Five parameters
+- `ICallGateProvider<T1, T2, T3, T4, T5, T6, TRet>` - Six parameters
+- `ICallGateProvider<T1, T2, T3, T4, T5, T6, T7, TRet>` - Seven parameters
+- `ICallGateProvider<T1, T2, T3, T4, T5, T6, T7, T8, TRet>` - Eight parameters
+
+## Type Parameters
+
+<ParamField path="T1" type="type">
+  The type of the first parameter
+</ParamField>
+
+<ParamField path="T2" type="type">
+  The type of the second parameter
+</ParamField>
+
+<ParamField path="T3" type="type">
+  The type of the third parameter
+</ParamField>
+
+<ParamField path="T4" type="type">
+  The type of the fourth parameter
+</ParamField>
+
+<ParamField path="T5" type="type">
+  The type of the fifth parameter
+</ParamField>
+
+<ParamField path="T6" type="type">
+  The type of the sixth parameter
+</ParamField>
+
+<ParamField path="T7" type="type">
+  The type of the seventh parameter
+</ParamField>
+
+<ParamField path="T8" type="type">
+  The type of the eighth parameter
+</ParamField>
+
+<ParamField path="TRet" type="type">
+  The return type of the function. Use `object` for void-like behavior
+</ParamField>
+
+## Properties
+
+<ResponseField name="SubscriptionCount" type="int">
+  Gets the count of subscribers listening for messages through this call gate. This can be used to determine if messages should be sent through the gate.
+</ResponseField>
+
+## Methods
+
+### UnregisterAction
+
+```csharp
+void UnregisterAction()
+```
+
+Removes the associated Action from this call gate, effectively disabling RPC calls.
+
+### UnregisterFunc
+
+```csharp
+void UnregisterFunc()
+```
+
+Removes the associated Function from this call gate.
+
+### GetContext
+
+```csharp
+IpcContext? GetContext()
+```
+
+Gets the current context for this IPC call. This will only be present when called from within an IPC action or function handler, and will be null otherwise.
+
+<ResponseField name="return" type="IpcContext?">
+  Returns the current IPC context, or null if not called from within an IPC handler
+</ResponseField>
+
+### RegisterAction
+
+```csharp
+void RegisterAction(Action action)
+void RegisterAction(Action<T1> action)
+void RegisterAction(Action<T1, T2> action)
+void RegisterAction(Action<T1, T2, T3> action)
+void RegisterAction(Action<T1, T2, T3, T4> action)
+void RegisterAction(Action<T1, T2, T3, T4, T5> action)
+void RegisterAction(Action<T1, T2, T3, T4, T5, T6> action)
+void RegisterAction(Action<T1, T2, T3, T4, T5, T6, T7> action)
+void RegisterAction(Action<T1, T2, T3, T4, T5, T6, T7, T8> action)
+```
+
+Registers a delegate for use by other plugins via RPC. This delegate must satisfy the constraints of an Action type, meaning it may not return a value and must have the proper number of parameters matching the interface's generic type parameters.
+
+<ParamField path="action" type="Action">
+  Action to register. The Action's parameters must match the generic type parameters of the interface
+</ParamField>
+
+### RegisterFunc
+
+```csharp
+void RegisterFunc(Func<TRet> func)
+void RegisterFunc(Func<T1, TRet> func)
+void RegisterFunc(Func<T1, T2, TRet> func)
+void RegisterFunc(Func<T1, T2, T3, TRet> func)
+void RegisterFunc(Func<T1, T2, T3, T4, TRet> func)
+void RegisterFunc(Func<T1, T2, T3, T4, T5, TRet> func)
+void RegisterFunc(Func<T1, T2, T3, T4, T5, T6, TRet> func)
+void RegisterFunc(Func<T1, T2, T3, T4, T5, T6, T7, TRet> func)
+void RegisterFunc(Func<T1, T2, T3, T4, T5, T6, T7, T8, TRet> func)
+```
+
+Registers a delegate for use by other plugins via RPC. This delegate must satisfy the constraints of a Func type, meaning its return type and parameters must match the interface's generic type parameters.
+
+<ParamField path="func" type="Func">
+  Func to register. The Func's parameters and return type must match the generic type parameters of the interface
+</ParamField>
+
+### SendMessage
+
+```csharp
+void SendMessage()
+void SendMessage(T1 arg1)
+void SendMessage(T1 arg1, T2 arg2)
+void SendMessage(T1 arg1, T2 arg2, T3 arg3)
+void SendMessage(T1 arg1, T2 arg2, T3 arg3, T4 arg4)
+void SendMessage(T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5)
+void SendMessage(T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6)
+void SendMessage(T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7)
+void SendMessage(T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5, T6 arg6, T7 arg7, T8 arg8)
+```
+
+Sends the given arguments to all subscribers of this IPC call gate. This method is intended to be used by the provider plugin to notify all subscribers of an event or data update. The parameters passed to this method will be passed to all subscribers, with appropriate serialization for complex data types. Primitive data types will be passed as-is. The subscription actions will be called sequentially in order of registration on the same thread as the caller.
+
+<ParamField path="arg1" type="T1">
+  First argument to pass to subscribers
+</ParamField>
+
+<ParamField path="arg2" type="T2">
+  Second argument to pass to subscribers
+</ParamField>
+
+<ParamField path="arg3" type="T3">
+  Third argument to pass to subscribers
+</ParamField>
+
+<ParamField path="arg4" type="T4">
+  Fourth argument to pass to subscribers
+</ParamField>
+
+<ParamField path="arg5" type="T5">
+  Fifth argument to pass to subscribers
+</ParamField>
+
+<ParamField path="arg6" type="T6">
+  Sixth argument to pass to subscribers
+</ParamField>
+
+<ParamField path="arg7" type="T7">
+  Seventh argument to pass to subscribers
+</ParamField>
+
+<ParamField path="arg8" type="T8">
+  Eighth argument to pass to subscribers
+</ParamField>
+
+## Usage Examples
+
+### Providing a simple function
+
+```csharp
+// Create a provider for a function that takes a string and returns an int
+var provider = pluginInterface.GetIpcProvider<string, int>("MyPlugin.GetLength");
+
+// Register the function implementation
+provider.RegisterFunc((string input) => input.Length);
+```
+
+### Providing an action with no return value
+
+```csharp
+// Create a provider for an action that takes two parameters
+var provider = pluginInterface.GetIpcProvider<string, int, object>("MyPlugin.LogMessage");
+
+// Register the action implementation
+provider.RegisterAction((string message, int level) => 
+{
+    Log.Information($"[Level {level}] {message}");
+});
+```
+
+### Sending notifications to subscribers
+
+```csharp
+// Create a provider for broadcasting events
+var provider = pluginInterface.GetIpcProvider<string, object>("MyPlugin.OnDataUpdated");
+
+// Register a notification action
+provider.RegisterAction((string data) => { });
+
+// Later, notify all subscribers
+if (provider.SubscriptionCount > 0)
+{
+    provider.SendMessage("New data available");
+}
+```
+
+### Checking caller context
+
+```csharp
+var provider = pluginInterface.GetIpcProvider<string, object>("MyPlugin.RestrictedAction");
+
+provider.RegisterAction((string data) => 
+{
+    var context = provider.GetContext();
+    if (context?.SourcePlugin != null)
+    {
+        Log.Information($"Called by plugin: {context.SourcePlugin.Name}");
+    }
+});
+```
+
+### Unregistering handlers
+
+```csharp
+var provider = pluginInterface.GetIpcProvider<string, int>("MyPlugin.Calculate");
+
+// Register a function
+provider.RegisterFunc((string input) => int.Parse(input));
+
+// Later, when your plugin is being disposed
+provider.UnregisterFunc();
+```
+
+## Notes
+
+- All IPC calls execute on the same thread as the caller
+- Complex data types are serialized when passed between plugins
+- Primitive data types are passed as-is
+- Only one Action or Func can be registered at a time per call gate
+- Use `SubscriptionCount` to check if any plugins are listening before sending messages

@@ -1,0 +1,373 @@
+---
+title: UiBuilder
+description: Core interface for drawing ImGui windows and UI in Dalamud plugins
+---
+
+The `UiBuilder` is the central interface for creating custom UI in Dalamud plugins. It provides access to the ImGui rendering system, font management, and event-driven drawing.
+
+## Getting Started
+
+Access the `UiBuilder` through your plugin's `DalamudPluginInterface`:
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private DalamudPluginInterface PluginInterface { get; init; }
+    
+    public MyPlugin(DalamudPluginInterface pluginInterface)
+    {
+        this.PluginInterface = pluginInterface;
+        
+        // Subscribe to the Draw event
+        this.PluginInterface.UiBuilder.Draw += DrawUI;
+        this.PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
+    }
+    
+    private void DrawUI()
+    {
+        ImGui.Begin("My Window");
+        ImGui.Text("Hello, world!");
+        ImGui.End();
+    }
+    
+    public void Dispose()
+    {
+        this.PluginInterface.UiBuilder.Draw -= DrawUI;
+        this.PluginInterface.UiBuilder.OpenConfigUi -= DrawConfigUI;
+    }
+}
+```
+
+## Core Events
+
+### Draw Event
+
+The `Draw` event is called every frame when Dalamud is ready to render plugin UI. This is where you should place all your ImGui rendering code.
+
+```csharp
+public event Action? Draw;
+```
+
+<Note>
+  The Draw event is called from the main thread during the game's rendering pipeline. All ImGui calls must be made within this event or its callbacks.
+</Note>
+
+### OpenConfigUi Event
+
+Triggered when the user requests to open your plugin's configuration interface (e.g., via `/xlplugins` settings button):
+
+```csharp
+public event Action? OpenConfigUi;
+```
+
+**Example:**
+```csharp
+this.PluginInterface.UiBuilder.OpenConfigUi += () =>
+{
+    this.configWindow.IsOpen = true;
+};
+```
+
+### OpenMainUi Event
+
+Triggered when the user requests to open your plugin's main interface:
+
+```csharp
+public event Action? OpenMainUi;
+```
+
+### ShowUi / HideUi Events
+
+These events fire when plugin UI should be shown or hidden based on game state:
+
+```csharp
+public event Action? ShowUi;
+public event Action? HideUi;
+```
+
+**Example: Respecting UI visibility**
+```csharp
+private bool isUiVisible = true;
+
+public MyPlugin(DalamudPluginInterface pluginInterface)
+{
+    pluginInterface.UiBuilder.ShowUi += () => this.isUiVisible = true;
+    pluginInterface.UiBuilder.HideUi += () => this.isUiVisible = false;
+}
+
+private void DrawUI()
+{
+    if (!this.isUiVisible) return;
+    
+    // Draw your UI
+}
+```
+
+## Automatic UI Hiding
+
+The `UiBuilder` provides properties to control automatic UI hiding behavior:
+
+```csharp
+// Disable automatic hiding when game UI is hidden
+public bool DisableAutomaticUiHide { get; set; }
+
+// Disable hiding when user toggles UI (Scroll Lock)
+public bool DisableUserUiHide { get; set; }
+
+// Disable hiding during cutscenes
+public bool DisableCutsceneUiHide { get; set; }
+
+// Disable hiding during GPose
+public bool DisableGposeUiHide { get; set; }
+```
+
+**Example:**
+```csharp
+// Keep overlay visible during cutscenes
+this.PluginInterface.UiBuilder.DisableCutsceneUiHide = true;
+```
+
+## UI State Properties
+
+### UiPrepared
+
+Indicates whether the UI system is ready for use:
+
+```csharp
+public bool UiPrepared { get; }
+```
+
+### ShouldModifyUi
+
+Indicates whether it's safe to modify the game's interface:
+
+```csharp
+public bool ShouldModifyUi { get; }
+```
+
+### CutsceneActive
+
+Check if a cutscene is currently playing:
+
+```csharp
+public bool CutsceneActive { get; }
+```
+
+### FrameCount
+
+Get the number of frames drawn since plugin creation:
+
+```csharp
+public ulong FrameCount { get; }
+```
+
+## Cursor Control
+
+Override the game's cursor with ImGui's cursor:
+
+```csharp
+// Enable ImGui cursor override
+this.PluginInterface.UiBuilder.OverrideGameCursor = true;
+```
+
+<Warning>
+  Only set `OverrideGameCursor` to true when your plugin actively needs cursor control. Remember to set it back to false when done.
+</Warning>
+
+## Accessibility Features
+
+### Reduced Motion
+
+Check if users have enabled reduced motion:
+
+```csharp
+if (this.PluginInterface.UiBuilder.ShouldUseReducedMotion)
+{
+    // Use minimal or no animations
+}
+else
+{
+    // Use full animations
+}
+```
+
+### Plugin UI Sound Effects
+
+Check if sound effects are enabled for plugin windows:
+
+```csharp
+if (this.PluginInterface.UiBuilder.PluginUISoundEffectsEnabled)
+{
+    // Sound effects will play when windows open/close
+}
+```
+
+## Waiting for UI
+
+If you need to perform operations that require the UI to be ready, use `WaitForUi`:
+
+```csharp
+await this.PluginInterface.UiBuilder.WaitForUi();
+// UI is now ready
+```
+
+Or run a function when UI is prepared:
+
+```csharp
+var result = await this.PluginInterface.UiBuilder.RunWhenUiPrepared(() =>
+{
+    // This runs when UI is ready
+    return someValue;
+}, runInFrameworkThread: true);
+```
+
+## Device and Window Handles
+
+Access Direct3D and window handles for advanced scenarios:
+
+```csharp
+// Get Direct3D device handle
+nint deviceHandle = this.PluginInterface.UiBuilder.DeviceHandle;
+
+// Get main window handle
+nint windowHandle = this.PluginInterface.UiBuilder.WindowHandlePtr;
+```
+
+<Warning>
+  These handles should only be used by advanced plugins that need direct access to rendering resources. Improper use can cause crashes.
+</Warning>
+
+## ResizeBuffers Event
+
+Handle DirectX buffer resize events:
+
+```csharp
+this.PluginInterface.UiBuilder.ResizeBuffers += () =>
+{
+    // Clean up and recreate DirectX resources
+};
+```
+
+## Style and Font Change Events
+
+React to changes in Dalamud's default styling:
+
+```csharp
+this.PluginInterface.UiBuilder.DefaultStyleChanged += () =>
+{
+    // Reload style-dependent resources
+};
+
+this.PluginInterface.UiBuilder.DefaultFontChanged += () =>
+{
+    // Reload font-dependent resources  
+};
+
+this.PluginInterface.UiBuilder.DefaultGlobalScaleChanged += () =>
+{
+    // Adjust UI for new scale
+};
+```
+
+## ULD Files
+
+Load game UI asset files (ULD format):
+
+```csharp
+var uld = this.PluginInterface.UiBuilder.LoadUld("ui/uld/LookingForGroup.uld");
+```
+
+## Best Practices
+
+<Steps>
+
+### Subscribe to Events in Constructor
+
+Subscribe to Draw and other events during plugin initialization.
+
+### Always Unsubscribe
+
+Unsubscribe from all events in your `Dispose` method to prevent memory leaks.
+
+### Check State Properties
+
+Use `UiPrepared` and `ShouldModifyUi` before performing UI operations that depend on game state.
+
+### Respect User Preferences
+
+Honor the `ShouldUseReducedMotion` and automatic hiding settings.
+
+### Handle Exceptions
+
+Wrap your Draw code in try-catch blocks to prevent crashes from breaking the entire UI.
+
+</Steps>
+
+## Complete Example
+
+```csharp
+public class ExamplePlugin : IDalamudPlugin
+{
+    private DalamudPluginInterface PluginInterface { get; init; }
+    private bool isVisible = true;
+    private bool configVisible = false;
+    
+    public ExamplePlugin(DalamudPluginInterface pluginInterface)
+    {
+        this.PluginInterface = pluginInterface;
+        
+        // Subscribe to events
+        pluginInterface.UiBuilder.Draw += DrawUI;
+        pluginInterface.UiBuilder.OpenConfigUi += ToggleConfig;
+        pluginInterface.UiBuilder.ShowUi += () => this.isVisible = true;
+        pluginInterface.UiBuilder.HideUi += () => this.isVisible = false;
+        
+        // Configure UI behavior
+        pluginInterface.UiBuilder.DisableCutsceneUiHide = false;
+    }
+    
+    private void DrawUI()
+    {
+        if (!this.isVisible) return;
+        
+        ImGui.Begin("Example Plugin");
+        ImGui.Text($"Frame: {this.PluginInterface.UiBuilder.FrameCount}");
+        
+        if (ImGui.Button("Open Config"))
+        {
+            this.configVisible = true;
+        }
+        ImGui.End();
+        
+        if (this.configVisible)
+        {
+            DrawConfigWindow();
+        }
+    }
+    
+    private void DrawConfigWindow()
+    {
+        ImGui.Begin("Configuration", ref this.configVisible);
+        ImGui.Text("Plugin settings go here");
+        ImGui.End();
+    }
+    
+    private void ToggleConfig()
+    {
+        this.configVisible = !this.configVisible;
+    }
+    
+    public void Dispose()
+    {
+        this.PluginInterface.UiBuilder.Draw -= DrawUI;
+        this.PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfig;
+    }
+}
+```
+
+## See Also
+
+- [Drawing Windows](/ui/drawing-windows) - Using the WindowSystem for managed window rendering
+- [ImGui Basics](/ui/imgui-basics) - Introduction to ImGui controls and layout
+- [Fonts](/ui/fonts) - Working with custom fonts
+- [Textures](/ui/textures) - Loading and displaying images

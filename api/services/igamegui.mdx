@@ -1,0 +1,355 @@
+---
+title: IGameGui
+description: Access game UI elements and coordinate conversion
+---
+
+## Overview
+
+`IGameGui` handles many aspects of the in-game UI. It provides access to addons, agents, coordinate conversion, and UI visibility state.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Events
+
+### UiHideToggled
+
+```csharp
+public event EventHandler<bool> UiHideToggled;
+```
+
+Fired when the game UI hiding is toggled.
+
+<ParamField path="hidden" type="bool">
+  True if UI is now hidden
+</ParamField>
+
+### HoveredItemChanged
+
+```csharp
+public event EventHandler<ulong> HoveredItemChanged;
+```
+
+Fired when the currently hovered item changes.
+
+<ParamField path="itemId" type="ulong">
+  The new hovered item ID (0 if none)
+</ParamField>
+
+### HoveredActionChanged
+
+```csharp
+public event EventHandler<HoveredAction> HoveredActionChanged;
+```
+
+Fired when the currently hovered action changes.
+
+<ParamField path="action" type="HoveredAction">
+  The new hovered action
+</ParamField>
+
+### AgentUpdate
+
+```csharp
+public event Action<AgentUpdateFlag> AgentUpdate;
+```
+
+Fired when the game sets one or more AgentUpdateFlag values, used by agents to conditionally update their addons.
+
+<ParamField path="flags" type="AgentUpdateFlag">
+  The agent update flags
+</ParamField>
+
+## Properties
+
+### GameUiHidden
+
+```csharp
+public bool GameUiHidden { get; }
+```
+
+Gets a value indicating whether the game UI is hidden.
+
+<ResponseField name="GameUiHidden" type="bool">
+  True if game UI is hidden
+</ResponseField>
+
+### HoveredItem
+
+```csharp
+public ulong HoveredItem { get; set; }
+```
+
+Gets or sets the item ID that is currently hovered by the player. 0 when no item is hovered. If > 1,000,000, subtract 1,000,000 and treat it as HQ.
+
+<ResponseField name="HoveredItem" type="ulong">
+  The currently hovered item ID
+</ResponseField>
+
+### HoveredAction
+
+```csharp
+public HoveredAction HoveredAction { get; }
+```
+
+Gets the action ID that is currently hovered by the player. 0 when no action is hovered.
+
+<ResponseField name="HoveredAction" type="HoveredAction">
+  The currently hovered action
+</ResponseField>
+
+## Methods
+
+### OpenMapWithMapLink
+
+```csharp
+public bool OpenMapWithMapLink(MapLinkPayload mapLink);
+```
+
+Opens the in-game map with a flag on the location of the parameter.
+
+<ParamField path="mapLink" type="MapLinkPayload" required>
+  Link to the map to be opened
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if there were no errors and the map could be opened
+</ResponseField>
+
+### WorldToScreen
+
+```csharp
+public bool WorldToScreen(Vector3 worldPos, out Vector2 screenPos);
+public bool WorldToScreen(Vector3 worldPos, out Vector2 screenPos, out bool inView);
+```
+
+Converts in-world coordinates to screen coordinates (upper left corner origin).
+
+<ParamField path="worldPos" type="Vector3" required>
+  Coordinates in the world
+</ParamField>
+
+<ParamField path="screenPos" type="Vector2">
+  Converted coordinates (out parameter)
+</ParamField>
+
+<ParamField path="inView" type="bool">
+  True if screenPos corresponds to a position inside the camera viewport (out parameter)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if worldPos corresponds to a position in front of the camera
+</ResponseField>
+
+### ScreenToWorld
+
+```csharp
+public bool ScreenToWorld(Vector2 screenPos, out Vector3 worldPos, float rayDistance = 100000.0f);
+```
+
+Converts screen coordinates to in-world coordinates via raycasting.
+
+<ParamField path="screenPos" type="Vector2" required>
+  Screen coordinates
+</ParamField>
+
+<ParamField path="worldPos" type="Vector3">
+  Converted coordinates (out parameter)
+</ParamField>
+
+<ParamField path="rayDistance" type="float">
+  How far to search for a collision (default: 100000.0f)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if successful. On false, worldPos's contents are undefined
+</ResponseField>
+
+### GetUIModule
+
+```csharp
+public UIModulePtr GetUIModule();
+```
+
+Gets a pointer to the game's UIModule instance.
+
+<ResponseField name="return" type="UIModulePtr">
+  A pointer wrapper to UIModule
+</ResponseField>
+
+### GetAddonByName
+
+```csharp
+public AtkUnitBasePtr GetAddonByName(string name, int index = 1);
+public T* GetAddonByName<T>(string name, int index = 1) where T : unmanaged;
+```
+
+Gets the pointer to the Addon with the given name and index.
+
+<ParamField path="name" type="string" required>
+  Name of addon to find
+</ParamField>
+
+<ParamField path="index" type="int">
+  Index of addon to find (1-indexed, default: 1)
+</ParamField>
+
+<ResponseField name="return" type="AtkUnitBasePtr | T*">
+  A pointer wrapper to the addon, or typed pointer
+</ResponseField>
+
+### GetAgentById
+
+```csharp
+public AgentInterfacePtr GetAgentById(int id);
+```
+
+Finds the agent associated with the given agent ID.
+
+<ParamField path="id" type="int" required>
+  The agent ID
+</ParamField>
+
+<ResponseField name="return" type="AgentInterfacePtr">
+  A pointer wrapper to the agent interface
+</ResponseField>
+
+### FindAgentInterface
+
+```csharp
+public AgentInterfacePtr FindAgentInterface(string addonName);
+public AgentInterfacePtr FindAgentInterface(AtkUnitBasePtr addon);
+```
+
+Finds the agent associated with an addon.
+
+<ParamField path="addonName" type="string">
+  The addon name
+</ParamField>
+
+<ParamField path="addon" type="AtkUnitBasePtr">
+  The addon address
+</ParamField>
+
+<ResponseField name="return" type="AgentInterfacePtr">
+  A pointer wrapper to the agent interface
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IGameGui gameGui;
+    
+    public MyPlugin(IGameGui gameGui)
+    {
+        this.gameGui = gameGui;
+        
+        // Subscribe to UI hide event
+        this.gameGui.UiHideToggled += OnUiHideToggled;
+        
+        // Subscribe to hovered item changes
+        this.gameGui.HoveredItemChanged += OnHoveredItemChanged;
+    }
+    
+    private void OnUiHideToggled(object? sender, bool isHidden)
+    {
+        Log.Information($"UI is now {(isHidden ? "hidden" : "visible")}");
+    }
+    
+    private void OnHoveredItemChanged(object? sender, ulong itemId)
+    {
+        if (itemId > 0)
+        {
+            var isHq = itemId > 1_000_000;
+            var actualItemId = isHq ? itemId - 1_000_000 : itemId;
+            Log.Information($"Hovering item {actualItemId} (HQ: {isHq})");
+        }
+    }
+    
+    public void DrawWorldMarker(Vector3 worldPos)
+    {
+        // Convert world position to screen position
+        if (this.gameGui.WorldToScreen(worldPos, out var screenPos))
+        {
+            // screenPos now contains the screen coordinates
+            ImGui.GetForegroundDrawList().AddCircle(
+                screenPos,
+                10f,
+                ImGui.GetColorU32(new Vector4(1, 0, 0, 1)));
+        }
+    }
+    
+    public void Dispose()
+    {
+        this.gameGui.UiHideToggled -= OnUiHideToggled;
+        this.gameGui.HoveredItemChanged -= OnHoveredItemChanged;
+    }
+}
+```
+
+## Advanced Usage
+
+### Working with Addons
+
+```csharp
+public unsafe void CheckAddon()
+{
+    // Get an addon by name
+    var addon = this.gameGui.GetAddonByName("NamePlate");
+    
+    if (addon != null && addon.IsVisible)
+    {
+        Log.Information("NamePlate addon is visible");
+    }
+    
+    // Get a typed addon pointer
+    var characterAddon = this.gameGui.GetAddonByName<AddonCharacter>("Character");
+    if (characterAddon != null)
+    {
+        // Work with typed addon
+    }
+}
+```
+
+### Screen to World Raycasting
+
+```csharp
+public void HandleMouseClick(Vector2 mousePos)
+{
+    if (this.gameGui.ScreenToWorld(mousePos, out var worldPos))
+    {
+        Log.Information($"Clicked world position: {worldPos}");
+    }
+}
+```
+
+### Opening Map Location
+
+```csharp
+public void OpenMapLocation(uint territoryId, uint mapId, float x, float y)
+{
+    var mapLink = new MapLinkPayload(
+        territoryId,
+        mapId,
+        (int)(x * 1000),
+        (int)(y * 1000));
+    
+    if (this.gameGui.OpenMapWithMapLink(mapLink))
+    {
+        Log.Information("Map opened successfully");
+    }
+}
+```
+
+## Remarks
+
+- Always unsubscribe from events in your plugin's `Dispose()` method
+- Addon pointers can become invalid when UIs are closed or reloaded
+- The `HoveredItem` ID greater than 1,000,000 indicates an HQ item
+- Screen coordinates use upper-left corner as origin (0,0)
+- World coordinate conversion may fail if the position is behind the camera or off-screen

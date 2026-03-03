@@ -1,0 +1,258 @@
+---
+title: IDataManager
+description: Access game data sheets and files
+---
+
+## Overview
+
+`IDataManager` provides access to Dalamud-internal features and game data. It allows plugins to access Excel sheets, game files, and check for modified game data.
+
+## Namespace
+
+```csharp
+Dalamud.Plugin.Services
+```
+
+## Properties
+
+### Language
+
+```csharp
+public ClientLanguage Language { get; }
+```
+
+Gets the current game client language.
+
+<ResponseField name="Language" type="ClientLanguage">
+  The client's language setting
+</ResponseField>
+
+### GameData
+
+```csharp
+public GameData GameData { get; }
+```
+
+Gets a Lumina GameData object which gives access to any excel/game data.
+
+<ResponseField name="GameData" type="GameData">
+  Lumina GameData instance
+</ResponseField>
+
+### Excel
+
+```csharp
+public ExcelModule Excel { get; }
+```
+
+Gets an ExcelModule object which gives access to any of the game's sheet data.
+
+<ResponseField name="Excel" type="ExcelModule">
+  Lumina ExcelModule instance
+</ResponseField>
+
+### HasModifiedGameDataFiles
+
+```csharp
+public bool HasModifiedGameDataFiles { get; }
+```
+
+Gets a value indicating whether the game data files have been modified by another third-party tool.
+
+<ResponseField name="HasModifiedGameDataFiles" type="bool">
+  True if game files are modified
+</ResponseField>
+
+## Methods
+
+### GetExcelSheet
+
+```csharp
+public ExcelSheet<T> GetExcelSheet<T>(ClientLanguage? language = null, string? name = null) 
+    where T : struct, IExcelRow<T>;
+```
+
+Gets an ExcelSheet with the given Excel sheet row type.
+
+<ParamField path="language" type="ClientLanguage?">
+  Language of the sheet to get. Leave null to use the default language
+</ParamField>
+
+<ParamField path="name" type="string?">
+  Explicitly provide the name of the sheet to get. Leave null to use T's sheet name. Explicit names are necessary for quest/dungeon/cutscene sheets
+</ParamField>
+
+<ResponseField name="return" type="ExcelSheet<T>">
+  The ExcelSheet, giving access to game rows
+</ResponseField>
+
+### GetSubrowExcelSheet
+
+```csharp
+public SubrowExcelSheet<T> GetSubrowExcelSheet<T>(ClientLanguage? language = null, string? name = null) 
+    where T : struct, IExcelSubrow<T>;
+```
+
+Gets a SubrowExcelSheet with the given Excel sheet row type.
+
+<ParamField path="language" type="ClientLanguage?">
+  Language of the sheet to get. Leave null to use the default language
+</ParamField>
+
+<ParamField path="name" type="string?">
+  Explicitly provide the name of the sheet to get. Leave null to use T's sheet name
+</ParamField>
+
+<ResponseField name="return" type="SubrowExcelSheet<T>">
+  The SubrowExcelSheet, giving access to game rows with subrows
+</ResponseField>
+
+### GetFile
+
+```csharp
+public FileResource? GetFile(string path);
+public T? GetFile<T>(string path) where T : FileResource;
+```
+
+Gets a FileResource with the given path.
+
+<ParamField path="path" type="string" required>
+  The path inside of the game files
+</ParamField>
+
+<ResponseField name="return" type="FileResource | T">
+  The FileResource of the file, or null if not found
+</ResponseField>
+
+### GetFileAsync
+
+```csharp
+public Task<T> GetFileAsync<T>(string path, CancellationToken cancellationToken) 
+    where T : FileResource;
+```
+
+Gets a FileResource with the given path, of the given type asynchronously.
+
+<ParamField path="path" type="string" required>
+  The path inside of the game files
+</ParamField>
+
+<ParamField path="cancellationToken" type="CancellationToken" required>
+  Cancellation token
+</ParamField>
+
+<ResponseField name="return" type="Task<T>">
+  A Task containing the FileResource of the file on success
+</ResponseField>
+
+### FileExists
+
+```csharp
+public bool FileExists(string path);
+```
+
+Checks if the file with the given path exists within the game's index files.
+
+<ParamField path="path" type="string" required>
+  The path inside of the game files
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the file exists
+</ResponseField>
+
+## Example Usage
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IDataManager dataManager;
+    
+    public MyPlugin(IDataManager dataManager)
+    {
+        this.dataManager = dataManager;
+        
+        // Get item sheet
+        var itemSheet = this.dataManager.GetExcelSheet<Item>();
+        if (itemSheet != null)
+        {
+            foreach (var item in itemSheet)
+            {
+                if (item.RowId > 0 && !string.IsNullOrEmpty(item.Name))
+                {
+                    Log.Information($"Item {item.RowId}: {item.Name}");
+                }
+            }
+        }
+        
+        // Get sheet in specific language
+        var itemSheetJP = this.dataManager.GetExcelSheet<Item>(ClientLanguage.Japanese);
+        
+        // Check for modified files
+        if (this.dataManager.HasModifiedGameDataFiles)
+        {
+            Log.Warning("Game files have been modified!");
+        }
+        
+        // Check if a file exists
+        if (this.dataManager.FileExists("common/graphics/texture/dummy.tex"))
+        {
+            // Load the file
+            var file = this.dataManager.GetFile<TexFile>("common/graphics/texture/dummy.tex");
+        }
+    }
+}
+```
+
+## Advanced Usage
+
+### Working with Subrow Sheets
+
+```csharp
+var questSheet = this.dataManager.GetSubrowExcelSheet<Quest>();
+if (questSheet != null)
+{
+    foreach (var quest in questSheet)
+    {
+        Log.Information($"Quest {quest.RowId}/{quest.SubRowId}: {quest.Name}");
+    }
+}
+```
+
+### Async File Loading
+
+```csharp
+public async Task LoadFileAsync()
+{
+    try
+    {
+        var file = await this.dataManager.GetFileAsync<TexFile>(
+            "common/graphics/texture/dummy.tex",
+            CancellationToken.None);
+        
+        // Use file
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Failed to load file");
+    }
+}
+```
+
+### Accessing Different Languages
+
+```csharp
+// Get the same sheet in all languages
+var itemEN = this.dataManager.GetExcelSheet<Item>(ClientLanguage.English);
+var itemJP = this.dataManager.GetExcelSheet<Item>(ClientLanguage.Japanese);
+var itemDE = this.dataManager.GetExcelSheet<Item>(ClientLanguage.German);
+var itemFR = this.dataManager.GetExcelSheet<Item>(ClientLanguage.French);
+```
+
+## Remarks
+
+- Excel sheets are cached internally for performance
+- Use the appropriate language parameter when you need localized data
+- For sheets with subrows (like Quest), use `GetSubrowExcelSheet<T>()`
+- The `HasModifiedGameDataFiles` property can help detect texture mods or other file modifications
+- File paths use forward slashes and are case-sensitive

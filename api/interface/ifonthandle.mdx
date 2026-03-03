@@ -1,0 +1,260 @@
+---
+title: 'IFontHandle'
+description: 'Reference counting handle for fonts in Dalamud'
+icon: 'font'
+---
+
+## Overview
+
+The `IFontHandle` interface represents a reference counting handle for fonts. It allows you to safely use fonts across different threads and ensures proper lifecycle management.
+
+**Namespace:** `Dalamud.Interface.ManagedFontAtlas`
+
+**Assembly:** Dalamud.dll
+
+<Warning>
+  This interface is not intended for plugins to implement. Use the instances provided by Dalamud.
+</Warning>
+
+## Events
+
+<ResponseField name="ImFontChanged" type="event ImFontChangedDelegate">
+  Called when the built instance of `ImFontPtr` has been changed.
+
+  **Delegate signature:**
+  ```csharp
+  public delegate void ImFontChangedDelegate(IFontHandle fontHandle, ILockedImFont lockedFont);
+  ```
+
+  <Note>
+    This event can be invoked outside the main thread.
+  </Note>
+
+  ```csharp
+  fontHandle.ImFontChanged += (handle, lockedFont) =>
+  {
+      // Font has been rebuilt/changed
+      Console.WriteLine($"Font changed: {lockedFont.ImFont}");
+  };
+  ```
+</ResponseField>
+
+## Properties
+
+<ResponseField name="LoadException" type="Exception?">
+  Gets the load exception, if it failed to load. Otherwise, it is `null`.
+
+  ```csharp
+  if (fontHandle.LoadException != null)
+  {
+      Console.WriteLine($"Font failed to load: {fontHandle.LoadException.Message}");
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Available" type="bool">
+  Gets a value indicating whether this font is ready for use.
+
+  Use `Push()` directly if you want to keep the current ImGui font if the font is not ready.
+  
+  Alternatively, use `WaitAsync()` to wait for this property to become `true`.
+
+  ```csharp
+  if (fontHandle.Available)
+  {
+      using (fontHandle.Push())
+      {
+          ImGui.Text("Text in custom font");
+      }
+  }
+  ```
+</ResponseField>
+
+## Methods
+
+<ResponseField name="TryLock" type="ILockedImFont?">
+  Attempts to lock the fully constructed instance of `ImFontPtr` corresponding to this `IFontHandle`, for use in any thread.
+
+  **Parameters:**
+  - `errorMessage` (out string?) - The error message, if any.
+
+  **Returns:** An instance of `ILockedImFont` that must be disposed after use on success; `null` with `errorMessage` populated on failure.
+
+  <Warning>
+    Modification of the font will exhibit undefined behavior if some other thread also uses the font.
+  </Warning>
+
+  ```csharp
+  if (fontHandle.TryLock(out var errorMessage) is { } lockedFont)
+  {
+      using (lockedFont)
+      {
+          var imFont = lockedFont.ImFont;
+          // Use the font
+      }
+  }
+  else
+  {
+      Console.WriteLine($"Failed to lock font: {errorMessage}");
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Lock" type="ILockedImFont">
+  Locks the fully constructed instance of `ImFontPtr` corresponding to this `IFontHandle`, for use in any thread.
+
+  **Returns:** An instance of `ILockedImFont` that must be disposed after use.
+
+  **Throws:** `InvalidOperationException` if `Available` is `false`.
+
+  <Note>
+    Calling `IFontHandle.Dispose()` will not unlock the `ImFontPtr` locked by this function.
+  </Note>
+
+  <Warning>
+    Modification of the font will exhibit undefined behavior if some other thread also uses the font.
+  </Warning>
+
+  ```csharp
+  using var lockedFont = fontHandle.Lock();
+  var imFont = lockedFont.ImFont;
+  // Use the font
+  ```
+</ResponseField>
+
+<ResponseField name="Push" type="IDisposable">
+  Pushes the current font into ImGui font stack, if available.
+
+  Use `ImGui.GetFont()` to access the current font. You may not access the font once you dispose this object.
+
+  **Returns:** A disposable object that will pop the font on dispose.
+
+  **Throws:** `InvalidOperationException` if called outside the main thread.
+
+  This function uses `ImGui.PushFont(ImFontPtr)`, and may do extra things. Use `IDisposable.Dispose()` or `Pop()` to undo this operation. Do not use `ImGui.PopFont()`.
+
+  ```csharp
+  // Push a font with `using` clause
+  using (fontHandle.Push())
+      ImGui.Text("Test");
+
+  // Push a font with a matching call to Pop()
+  fontHandle.Push();
+  ImGui.Text("Test 2");
+  fontHandle.Pop();
+
+  // Push a font between two choices
+  using ((someCondition ? myFontHandle : uiBuilder.MonoFontHandle).Push())
+      ImGui.Text("Test 3");
+  ```
+</ResponseField>
+
+<ResponseField name="Pop" type="void">
+  Pops the font pushed to ImGui using `Push()`, cleaning up any extra information as needed.
+
+  ```csharp
+  fontHandle.Push();
+  ImGui.Text("Text in custom font");
+  fontHandle.Pop();
+  ```
+</ResponseField>
+
+<ResponseField name="WaitAsync" type="Task<IFontHandle>">
+  Waits for `Available` to become `true`.
+
+  **Parameters (overload):**
+  - `cancellationToken` (CancellationToken) - The cancellation token.
+
+  **Returns:** A task containing this `IFontHandle`.
+
+  ```csharp
+  var handle = await fontHandle.WaitAsync();
+  // Font is now available
+  using (handle.Push())
+  {
+      ImGui.Text("Font is ready!");
+  }
+  ```
+</ResponseField>
+
+## Usage Example
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IFontHandle customFont;
+    private readonly IUiBuilder uiBuilder;
+
+    public MyPlugin(IDalamudPluginInterface pluginInterface)
+    {
+        this.uiBuilder = pluginInterface.UiBuilder;
+        
+        // Create a custom font
+        var fontAtlas = this.uiBuilder.FontAtlas;
+        this.customFont = fontAtlas.NewDelegateFontHandle(
+            e => e.OnPreBuild(tk => tk.AddDalamudAssetFont(
+                DalamudAsset.InconsolataRegular,
+                new() { SizePx = 16.0f })));
+
+        this.uiBuilder.Draw += OnDraw;
+    }
+
+    private void OnDraw()
+    {
+        ImGui.Begin("Font Example");
+
+        // Check if font is available
+        if (customFont.Available)
+        {
+            // Use the custom font
+            using (customFont.Push())
+            {
+                ImGui.Text("This text uses the custom font");
+            }
+        }
+        else if (customFont.LoadException != null)
+        {
+            ImGui.TextColored(
+                new Vector4(1, 0, 0, 1),
+                $"Font failed to load: {customFont.LoadException.Message}");
+        }
+        else
+        {
+            ImGui.Text("Font is loading...");
+        }
+
+        ImGui.End();
+    }
+
+    public void Dispose()
+    {
+        this.uiBuilder.Draw -= OnDraw;
+        this.customFont?.Dispose();
+    }
+}
+```
+
+## Related Types
+
+### ILockedImFont
+
+The wrapper for `ImFontPtr`, guaranteeing that the associated data will be available as long as this struct is not disposed.
+
+**Properties:**
+- `ImFont` (ImFontPtr) - Gets the associated `ImFontPtr`.
+
+**Methods:**
+- `NewRef()` - Creates a new instance of `ILockedImFont` with an additional reference to the owner.
+
+```csharp
+using var lockedFont = fontHandle.Lock();
+var imFont = lockedFont.ImFont;
+
+// Create an additional reference
+using var anotherRef = lockedFont.NewRef();
+```
+
+## See Also
+
+- [IUiBuilder](/api/interface/iuibuilder) - UI builder interface
+- [Font Atlas Documentation](/ui/fonts) - Guide on using fonts in Dalamud

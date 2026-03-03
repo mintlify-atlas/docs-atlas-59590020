@@ -1,0 +1,610 @@
+---
+title: CallGate Subscriber
+description: Consume functionality from other plugins using IPC subscribers
+---
+
+CallGate subscribers allow your plugin to call functions exposed by other plugins and receive notifications from them. This enables your plugin to integrate with and extend the functionality of other plugins.
+
+## Creating a Subscriber
+
+Use `GetIpcSubscriber` with type parameters matching the provider's signature:
+
+```csharp
+var subscriber = this.pluginInterface.GetIpcSubscriber<TRet>("gate.name");
+var subscriber = this.pluginInterface.GetIpcSubscriber<T1, TRet>("gate.name");
+var subscriber = this.pluginInterface.GetIpcSubscriber<T1, T2, TRet>("gate.name");
+// ... up to 8 parameters
+```
+
+<Note>
+  The type parameters must match exactly with the provider's registration, or be compatible types that Dalamud can convert.
+</Note>
+
+## Interface Reference
+
+Subscribers implement `ICallGateSubscriber<...>` with these members:
+
+### Properties
+
+```csharp
+public interface ICallGateSubscriber
+{
+    /// <summary>
+    /// Whether the provider has registered an action.
+    /// </summary>
+    bool HasAction { get; }
+    
+    /// <summary>
+    /// Whether the provider has registered a function.
+    /// </summary>
+    bool HasFunction { get; }
+}
+```
+
+### Methods
+
+```csharp
+// Call the provider's action (no return value)
+void InvokeAction(T1 arg1, T2 arg2, ...);
+
+// Call the provider's function (with return value)
+TRet InvokeFunc(T1 arg1, T2 arg2, ...);
+
+// Subscribe to notifications from the provider
+void Subscribe(Action<T1, T2, ...> action);
+
+// Unsubscribe from notifications
+void Unsubscribe(Action<T1, T2, ...> action);
+```
+
+## Calling Functions
+
+### Invoking Functions with Return Values
+
+Call a provider's function and get the result:
+
+```csharp
+private ICallGateSubscriber<string, int>? subscriber;
+
+public void Initialize()
+{
+    this.subscriber = this.pluginInterface.GetIpcSubscriber<string, int>(
+        "MyPlugin.GetLength");
+}
+
+public void UseFunction()
+{
+    try
+    {
+        var result = this.subscriber.InvokeFunc("Hello World");
+        PluginLog.Information($"Result: {result}");
+    }
+    catch (IpcNotReadyError)
+    {
+        PluginLog.Warning("Provider is not ready yet");
+    }
+    catch (Exception ex)
+    {
+        PluginLog.Error(ex, "IPC call failed");
+    }
+}
+```
+
+### Invoking Actions without Return Values
+
+Call a provider's action:
+
+```csharp
+private ICallGateSubscriber<string, object>? subscriber;
+
+public void Initialize()
+{
+    this.subscriber = this.pluginInterface.GetIpcSubscriber<string, object>(
+        "MyPlugin.DoWork");
+}
+
+public void TriggerAction()
+{
+    try
+    {
+        this.subscriber.InvokeAction("Process this");
+    }
+    catch (IpcNotReadyError)
+    {
+        PluginLog.Warning("Provider is not ready yet");
+    }
+}
+```
+
+### Checking Availability
+
+Check if a provider is ready before calling:
+
+```csharp
+if (this.subscriber.HasFunction)
+{
+    var result = this.subscriber.InvokeFunc("input");
+}
+else
+{
+    PluginLog.Warning("Provider function not available");
+}
+```
+
+## Subscribing to Notifications
+
+Receive event notifications from providers:
+
+```csharp
+private ICallGateSubscriber<string, object>? statusSubscriber;
+
+public void Initialize()
+{
+    this.statusSubscriber = this.pluginInterface.GetIpcSubscriber<string, object>(
+        "MyPlugin.StatusChanged");
+    
+    // Subscribe to notifications
+    this.statusSubscriber.Subscribe(this.OnStatusChanged);
+}
+
+private void OnStatusChanged(string newStatus)
+{
+    PluginLog.Information($"Status changed to: {newStatus}");
+    // Handle the notification
+}
+
+public void Dispose()
+{
+    // Always unsubscribe
+    this.statusSubscriber?.Unsubscribe(this.OnStatusChanged);
+}
+```
+
+<Warning>
+  Always unsubscribe in your `Dispose` method. You must pass the exact same delegate instance that was used for `Subscribe`.
+</Warning>
+
+## Error Handling
+
+### IPC Exceptions
+
+Handle common IPC errors:
+
+```csharp
+using Dalamud.Plugin.Ipc.Exceptions;
+
+try
+{
+    var result = this.subscriber.InvokeFunc("input");
+}
+catch (IpcNotReadyError ex)
+{
+    // The provider hasn't registered a function yet
+    // The provider plugin may not be installed or loaded
+    PluginLog.Warning($"IPC not ready: {ex.Message}");
+}
+catch (IpcTypeMismatchError ex)
+{
+    // Type parameters don't match the provider's registration
+    PluginLog.Error($"Type mismatch: {ex.Message}");
+}
+catch (IpcLengthMismatchError ex)
+{
+    // Wrong number of parameters
+    PluginLog.Error($"Parameter count mismatch: {ex.Message}");
+}
+catch (Exception ex)
+{
+    // Provider threw an exception during execution
+    PluginLog.Error(ex, "IPC call failed");
+}
+```
+
+### Graceful Degradation
+
+Handle missing providers gracefully:
+
+```csharp
+public class OptionalIntegration
+{
+    private ICallGateSubscriber<string>? subscriber;
+    private bool isAvailable;
+    
+    public void Initialize(IDalamudPluginInterface pluginInterface)
+    {
+        this.subscriber = pluginInterface.GetIpcSubscriber<string>(
+            "OtherPlugin.GetData");
+        
+        // Check availability
+        this.isAvailable = this.subscriber.HasFunction;
+        
+        if (!this.isAvailable)
+        {
+            PluginLog.Information(
+                "Optional integration not available - continuing without it");
+        }
+    }
+    
+    public string? GetData()
+    {
+        if (!this.isAvailable)
+        {
+            return null; // Graceful fallback
+        }
+        
+        try
+        {
+            return this.subscriber.InvokeFunc();
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex, "Failed to get data from integration");
+            this.isAvailable = false; // Mark as unavailable
+            return null;
+        }
+    }
+}
+```
+
+## Practical Example: Character Service Consumer
+
+A complete example consuming character information:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Ipc;
+using Dalamud.Plugin.Ipc.Exceptions;
+using Dalamud.Plugin.Services;
+
+public class CharacterServiceConsumer : IDisposable
+{
+    private readonly IPluginLog log;
+    
+    private ICallGateSubscriber<string?>? nameSubscriber;
+    private ICallGateSubscriber<uint>? levelSubscriber;
+    private ICallGateSubscriber<string, object>? loginSubscriber;
+    
+    public CharacterServiceConsumer(
+        IDalamudPluginInterface pluginInterface,
+        IPluginLog log)
+    {
+        this.log = log;
+        
+        // Subscribe to functions
+        this.nameSubscriber = pluginInterface.GetIpcSubscriber<string?>(
+            "CharacterService.GetName");
+        this.levelSubscriber = pluginInterface.GetIpcSubscriber<uint>(
+            "CharacterService.GetLevel");
+        
+        // Subscribe to notifications
+        this.loginSubscriber = pluginInterface.GetIpcSubscriber<string, object>(
+            "CharacterService.Login");
+        this.loginSubscriber.Subscribe(this.OnPlayerLogin);
+    }
+    
+    public string? GetPlayerName()
+    {
+        try
+        {
+            if (this.nameSubscriber?.HasFunction == true)
+            {
+                return this.nameSubscriber.InvokeFunc();
+            }
+        }
+        catch (Exception ex)
+        {
+            this.log.Error(ex, "Failed to get player name via IPC");
+        }
+        
+        return null;
+    }
+    
+    public uint GetPlayerLevel()
+    {
+        try
+        {
+            if (this.levelSubscriber?.HasFunction == true)
+            {
+                return this.levelSubscriber.InvokeFunc();
+            }
+        }
+        catch (Exception ex)
+        {
+            this.log.Error(ex, "Failed to get player level via IPC");
+        }
+        
+        return 0;
+    }
+    
+    private void OnPlayerLogin(string characterName)
+    {
+        this.log.Information($"Player logged in: {characterName}");
+        
+        // Update UI or cache when login occurs
+        var level = this.GetPlayerLevel();
+        this.log.Information($"  Level: {level}");
+    }
+    
+    public void Dispose()
+    {
+        // Unsubscribe from notifications
+        this.loginSubscriber?.Unsubscribe(this.OnPlayerLogin);
+    }
+}
+```
+
+## Complex Type Example
+
+Consume complex data structures:
+
+```csharp
+// Define matching type (or use a shared assembly)
+public class CharacterInfo
+{
+    public string Name { get; set; }
+    public uint Level { get; set; }
+    public uint ClassJob { get; set; }
+    public string WorldName { get; set; }
+}
+
+public class ComplexIpcConsumer
+{
+    private ICallGateSubscriber<CharacterInfo>? infoSubscriber;
+    
+    public void Initialize(IDalamudPluginInterface pluginInterface)
+    {
+        this.infoSubscriber = pluginInterface.GetIpcSubscriber<CharacterInfo>(
+            "MyPlugin.GetCharacterInfo");
+    }
+    
+    public void DisplayInfo()
+    {
+        try
+        {
+            var info = this.infoSubscriber?.InvokeFunc();
+            
+            if (info != null)
+            {
+                PluginLog.Information($"Character: {info.Name}");
+                PluginLog.Information($"Level: {info.Level}");
+                PluginLog.Information($"World: {info.WorldName}");
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex, "Failed to get character info");
+        }
+    }
+}
+```
+
+<Note>
+  Complex types are automatically deserialized from JSON. The types don't need to be identical - compatible types with matching properties will work.
+</Note>
+
+## Multiple Subscribers
+
+Multiple plugins can subscribe to the same gate:
+
+```csharp
+// Plugin A
+this.subscriber.Subscribe(msg => PluginLog.Information("Plugin A: {0}", msg));
+
+// Plugin B
+this.subscriber.Subscribe(msg => PluginLog.Information("Plugin B: {0}", msg));
+
+// When provider sends a message, both will receive it
+```
+
+Notifications are delivered sequentially in the order subscriptions were registered.
+
+## Best Practices
+
+### Cache Subscriber Instances
+
+Create subscribers once and reuse them:
+
+```csharp
+// Good: Cache the subscriber
+private ICallGateSubscriber<string>? subscriber;
+
+public void Initialize()
+{
+    this.subscriber = pluginInterface.GetIpcSubscriber<string>("Api.Method");
+}
+
+// Bad: Creating new subscriber every call
+public void BadExample()
+{
+    var subscriber = pluginInterface.GetIpcSubscriber<string>("Api.Method");
+    subscriber.InvokeFunc();
+}
+```
+
+### Check Availability Before Use
+
+Always verify the provider is ready:
+
+```csharp
+if (this.subscriber?.HasFunction == true)
+{
+    var result = this.subscriber.InvokeFunc();
+}
+```
+
+### Handle Missing Dependencies
+
+Provide fallback behavior when integrations aren't available:
+
+```csharp
+public string GetCharacterName()
+{
+    // Try IPC first
+    try
+    {
+        if (this.nameSubscriber?.HasFunction == true)
+        {
+            return this.nameSubscriber.InvokeFunc() ?? "Unknown";
+        }
+    }
+    catch (Exception ex)
+    {
+        PluginLog.Warning(ex, "IPC failed, using fallback");
+    }
+    
+    // Fallback to direct access
+    return this.clientState.LocalPlayer?.Name.TextValue ?? "Unknown";
+}
+```
+
+### Unsubscribe Properly
+
+Store method references to enable unsubscribing:
+
+```csharp
+public class ProperSubscription
+{
+    private ICallGateSubscriber<string, object>? subscriber;
+    private Action<string>? handler;
+    
+    public void Initialize()
+    {
+        this.subscriber = pluginInterface.GetIpcSubscriber<string, object>(
+            "Event.Name");
+        
+        // Store the handler reference
+        this.handler = this.OnEvent;
+        this.subscriber.Subscribe(this.handler);
+    }
+    
+    private void OnEvent(string data)
+    {
+        // Handle event
+    }
+    
+    public void Dispose()
+    {
+        // Unsubscribe using the same reference
+        if (this.handler != null)
+        {
+            this.subscriber?.Unsubscribe(this.handler);
+        }
+    }
+}
+```
+
+<Warning>
+  Using lambda expressions makes unsubscribing difficult. Store method references instead.
+</Warning>
+
+### Don't Block Notifications
+
+Keep notification handlers fast:
+
+```csharp
+// Good: Fast handler
+this.subscriber.Subscribe(data =>
+{
+    this.cachedValue = data;
+});
+
+// Bad: Slow handler blocks other subscribers
+this.subscriber.Subscribe(data =>
+{
+    // Don't do expensive operations in handlers
+    this.database.Query("UPDATE ...").Execute();
+    Thread.Sleep(1000);
+});
+```
+
+### Version Compatibility
+
+Support multiple API versions:
+
+```csharp
+public class VersionedApi
+{
+    private ICallGateSubscriber<string, int>? subscriberV2;
+    private ICallGateSubscriber<string>? subscriberV1;
+    
+    public void Initialize(IDalamudPluginInterface pluginInterface)
+    {
+        // Try new API first
+        this.subscriberV2 = pluginInterface.GetIpcSubscriber<string, int>(
+            "MyPlugin.GetData.v2");
+        
+        // Fallback to old API
+        if (!this.subscriberV2.HasFunction)
+        {
+            this.subscriberV1 = pluginInterface.GetIpcSubscriber<string>(
+                "MyPlugin.GetData");
+        }
+    }
+    
+    public int GetData()
+    {
+        // Use new API if available
+        if (this.subscriberV2?.HasFunction == true)
+        {
+            return this.subscriberV2.InvokeFunc();
+        }
+        
+        // Fallback to old API with conversion
+        if (this.subscriberV1?.HasFunction == true)
+        {
+            var oldResult = this.subscriberV1.InvokeFunc();
+            return ConvertOldFormat(oldResult);
+        }
+        
+        return 0;
+    }
+}
+```
+
+## Testing IPC Integration
+
+Create test stubs for development:
+
+```csharp
+#if DEBUG
+public class IpcTestStub
+{
+    public void SetupTestProvider(IDalamudPluginInterface pluginInterface)
+    {
+        // Create a test provider for development
+        var provider = pluginInterface.GetIpcProvider<string, int>(
+            "TestPlugin.GetLength");
+        
+        provider.RegisterFunc(input => input?.Length ?? 0);
+    }
+}
+#endif
+```
+
+## Cleanup
+
+Always clean up subscriptions:
+
+```csharp
+public void Dispose()
+{
+    // Unsubscribe from all notifications
+    this.statusSubscriber?.Unsubscribe(this.OnStatusChanged);
+    this.eventSubscriber?.Unsubscribe(this.OnEvent);
+    
+    // Clear references
+    this.statusSubscriber = null;
+    this.eventSubscriber = null;
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CallGate Provider" icon="tower-broadcast" href="/ipc/callgate-provider">
+    Learn how to expose your own IPC APIs
+  </Card>
+  <Card title="Data Sharing" icon="database" href="/ipc/data-sharing">
+    Share large data structures efficiently
+  </Card>
+</CardGroup>

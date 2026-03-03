@@ -1,0 +1,556 @@
+---
+title: "Dependency Injection"
+description: "Understanding Dalamud's IoC container and service injection system"
+icon: "plug"
+---
+
+Dalamud uses a sophisticated Inversion of Control (IoC) container to manage services and inject dependencies into plugins. This system ensures clean separation of concerns and makes testing easier.
+
+## Overview
+
+Dependency Injection (DI) in Dalamud allows plugins to receive services through:
+
+<CardGroup cols={2}>
+  <Card title="Constructor Injection" icon="plus">
+    Services injected as constructor parameters
+  </Card>
+  
+  <Card title="Property Injection" icon="arrow-right">
+    Services injected into properties marked with `[PluginService]`
+  </Card>
+</CardGroup>
+
+## Constructor Injection
+
+The recommended way to receive services is through your plugin's constructor:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly DalamudPluginInterface pluginInterface;
+    private readonly ICommandManager commands;
+    private readonly IChatGui chat;
+    
+    public MyPlugin(
+        DalamudPluginInterface pluginInterface,
+        ICommandManager commands,
+        IChatGui chat)
+    {
+        this.pluginInterface = pluginInterface;
+        this.commands = commands;
+        this.chat = chat;
+        
+        // Services are now available for use
+        commands.AddHandler("/mycommand", new CommandInfo(OnCommand)
+        {
+            HelpMessage = "My plugin command"
+        });
+    }
+    
+    public void Dispose()
+    {
+        commands.RemoveHandler("/mycommand");
+    }
+}
+```
+
+<Info>
+  Constructor injection is **type-safe** and makes your dependencies explicit. The compiler will catch errors if you reference a service that doesn't exist.
+</Info>
+
+## Property Injection
+
+You can also use property injection with the `[PluginService]` attribute:
+
+```csharp
+using Dalamud.IoC;
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+
+public class MyPlugin : IDalamudPlugin
+{
+    [PluginService]
+    public static IDataManager DataManager { get; set; } = null!;
+    
+    [PluginService]
+    public static IChatGui Chat { get; set; } = null!;
+    
+    [PluginService]
+    public static ICommandManager Commands { get; set; } = null!;
+    
+    public MyPlugin(DalamudPluginInterface pluginInterface)
+    {
+        // Properties are injected AFTER constructor runs
+        // but BEFORE plugin becomes active
+    }
+    
+    public void Dispose()
+    {
+        // Cleanup
+    }
+}
+```
+
+<Warning>
+  Property-injected services are set AFTER the constructor completes. Don't try to use them in your constructor!
+</Warning>
+
+### Static vs Instance Properties
+
+Property injection works with both static and instance properties:
+
+<CodeGroup>
+```csharp Static (Shared Across Plugin)
+[PluginService]
+public static IClientState ClientState { get; set; } = null!;
+```
+
+```csharp Instance (Per Plugin Instance)
+[PluginService]
+public IClientState ClientState { get; set; } = null!;
+```
+</CodeGroup>
+
+<Note>
+  Static properties are convenient but can complicate testing. Consider using constructor injection for better testability.
+</Note>
+
+## The ServiceContainer
+
+Dalamud's IoC is powered by the `ServiceContainer` class:
+
+```csharp
+// From Dalamud/IoC/Internal/ServiceContainer.cs:22
+internal class ServiceContainer : IServiceType
+{
+    private readonly Dictionary<Type, ObjectInstance> instances = [];
+    private readonly Dictionary<Type, Type> interfaceToTypeMap = [];
+    
+    // ...
+}
+```
+
+### How Services Are Resolved
+
+When your plugin is constructed, the container resolves dependencies:
+
+<Steps>
+  <Step title="Constructor Discovery">
+    The container finds an eligible constructor:
+    
+    ```csharp
+    // From ServiceContainer.cs:217
+    private ConstructorInfo? FindApplicableCtor(Type type, object[] scopedObjects)
+    {
+        var ctors = type.GetConstructors(ctorFlags);
+        foreach (var ctor in ctors)
+        {
+            if (this.ValidateCtor(ctor, allValidServiceTypes))
+                return ctor;
+        }
+        return null;
+    }
+    ```
+  </Step>
+
+  <Step title="Parameter Resolution">
+    Each constructor parameter is resolved:
+    
+    ```csharp
+    // From ServiceContainer.cs:108
+    var resolvedParams =
+        await Task.WhenAll(
+            ctor.GetParameters()
+                .Select(p => p.ParameterType)
+                .Select(type => this.GetService(type, scopeImpl, scopedObjects)));
+    ```
+  </Step>
+
+  <Step title="Instance Creation">
+    The plugin is instantiated with resolved parameters:
+    
+    ```csharp
+    // From ServiceContainer.cs:112
+    var instance = RuntimeHelpers.GetUninitializedObject(objectType);
+    ```
+  </Step>
+
+  <Step title="Property Injection">
+    Properties marked with `[PluginService]` are injected:
+    
+    ```csharp
+    // From ServiceContainer.cs:115
+    await this.InjectProperties(instance, scopedObjects, scope);
+    ```
+  </Step>
+
+  <Step title="Constructor Invocation">
+    Finally, the constructor runs:
+    
+    ```csharp
+    // From ServiceContainer.cs:121
+    await Task.Factory.StartNew(
+        () => ctor.Invoke(instance, resolvedParams),
+        CancellationToken.None,
+        TaskCreationOptions.LongRunning,
+        TaskScheduler.Default).ConfigureAwait(false);
+    ```
+  </Step>
+</Steps>
+
+## Service Scoping
+
+Dalamud supports both singleton and scoped services:
+
+### Singleton Services
+
+Most Dalamud services are singletons shared across all plugins:
+
+```csharp
+// These are singleton services
+public MyPlugin(IClientState clientState, IDataManager dataManager)
+{
+    // Same instance shared by all plugins
+}
+```
+
+### Scoped Services
+
+Some services are scoped to individual plugins:
+
+```csharp
+// From ServiceContainer.cs:184
+if (serviceType.GetCustomAttribute<ServiceManager.ScopedServiceAttribute>() != null)
+{
+    if (scope == null)
+    {
+        throw new InvalidOperationException(
+            $"Failed to create {serviceType.FullName ?? serviceType.Name}, is scoped but no scope provided");
+    }
+    
+    return await scope.CreatePrivateScopedObject(serviceType, scopedObjects);
+}
+```
+
+<Info>
+  Plugin-specific services like `DalamudPluginInterface` are scoped to each plugin instance.
+</Info>
+
+## Interface Resolution
+
+Services can be resolved by interface or concrete type:
+
+```csharp
+// Both of these work:
+public MyPlugin(IClientState clientState) { }  // Interface
+public MyPlugin(ClientState clientState) { }   // Concrete type (not recommended)
+```
+
+The container maintains a mapping:
+
+```csharp
+// From ServiceContainer.cs:68
+public void RegisterInterfaces(Type type)
+{
+    var resolveViaTypes = type
+                          .GetCustomAttributes()
+                          .OfType<ResolveViaAttribute>()
+                          .Select(x => x.GetType().GetGenericArguments().First());
+    foreach (var resolvableType in resolveViaTypes)
+    {
+        this.interfaceToTypeMap[resolvableType] = type;
+    }
+}
+```
+
+<Note>
+  Always use interfaces (like `IClientState`) rather than concrete types. This future-proofs your code against internal Dalamud changes.
+</Note>
+
+## Available Services
+
+Plugins can inject any service marked with `[PluginInterface]`:
+
+```csharp
+// From Dalamud/IoC/PluginInterfaceAttribute.cs:7
+[AttributeUsage(AttributeTargets.Class)]
+public class PluginInterfaceAttribute : Attribute
+{
+}
+```
+
+Commonly used services include:
+
+<AccordionGroup>
+  <Accordion title="DalamudPluginInterface" icon="puzzle-piece">
+    Core plugin interface providing access to UI builder, configuration, and plugin metadata:
+    
+    ```csharp
+    public MyPlugin(DalamudPluginInterface pluginInterface)
+    {
+        pluginInterface.UiBuilder.Draw += DrawUI;
+        var configDir = pluginInterface.ConfigDirectory;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="IClientState" icon="user">
+    Access player and character state:
+    
+    ```csharp
+    public MyPlugin(IClientState clientState)
+    {
+        var player = clientState.LocalPlayer;
+        var territory = clientState.TerritoryType;
+        clientState.TerritoryChanged += OnTerritoryChanged;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ICommandManager" icon="terminal">
+    Register chat commands:
+    
+    ```csharp
+    public MyPlugin(ICommandManager commands)
+    {
+        commands.AddHandler("/mycommand", new CommandInfo(OnCommand)
+        {
+            HelpMessage = "My command"
+        });
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="IChatGui" icon="comments">
+    Print messages to chat:
+    
+    ```csharp
+    public MyPlugin(IChatGui chat)
+    {
+        chat.Print("Hello from my plugin!");
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="IDataManager" icon="database">
+    Access game data:
+    
+    ```csharp
+    public MyPlugin(IDataManager dataManager)
+    {
+        var item = dataManager.GetExcelSheet<Item>()?.GetRow(1);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="IFramework" icon="clock">
+    Subscribe to game update ticks:
+    
+    ```csharp
+    public MyPlugin(IFramework framework)
+    {
+        framework.Update += OnFrameworkUpdate;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Info>
+  For a complete list of services, see the [API Reference](/api-reference).
+</Info>
+
+## Service Attributes
+
+Dalamud services are marked with attributes indicating their lifetime:
+
+```csharp
+// From ServiceManager.cs:650
+[AttributeUsage(AttributeTargets.Class)]
+public class ProvidedServiceAttribute : ServiceAttribute { }
+
+[AttributeUsage(AttributeTargets.Class)]
+public class EarlyLoadedServiceAttribute : ServiceAttribute { }
+
+[AttributeUsage(AttributeTargets.Class)]
+public class BlockingEarlyLoadedServiceAttribute : EarlyLoadedServiceAttribute { }
+
+[AttributeUsage(AttributeTargets.Class)]
+public class ScopedServiceAttribute : ServiceAttribute { }
+```
+
+<Tabs>
+  <Tab title="ProvidedService">
+    Manually provided by Dalamud during startup:
+    
+    ```csharp
+    [ServiceManager.ProvidedService]
+    internal class ServiceContainer : IServiceType
+    ```
+  </Tab>
+
+  <Tab title="EarlyLoadedService">
+    Loaded asynchronously during startup:
+    
+    ```csharp
+    [ServiceManager.EarlyLoadedService]
+    internal class MyService : IServiceType
+    ```
+  </Tab>
+
+  <Tab title="BlockingEarlyLoadedService">
+    Loaded synchronously, blocking game startup until ready:
+    
+    ```csharp
+    [ServiceManager.BlockingEarlyLoadedService("Required for plugin loading")]
+    internal class PluginManager : IServiceType
+    ```
+  </Tab>
+
+  <Tab title="ScopedService">
+    Created per-scope (e.g., per plugin):
+    
+    ```csharp
+    [ServiceManager.ScopedService]
+    internal class PluginSpecificService : IServiceType
+    ```
+  </Tab>
+</Tabs>
+
+## Dependency Validation
+
+The container validates dependencies at startup:
+
+```csharp
+// From ServiceContainer.cs:242
+private bool ValidateCtor(ConstructorInfo ctor, Type[] validTypes)
+{
+    bool IsTypeValid(Type type)
+    {
+        var contains = validTypes.Any(x => x.IsAssignableTo(type));
+        return contains || type.GetCustomAttribute<ServiceManager.ScopedServiceAttribute>() != null;
+    }
+    
+    var parameters = ctor.GetParameters();
+    foreach (var parameter in parameters)
+    {
+        if (!IsTypeValid(parameter.ParameterType))
+        {
+            Log.Error("Ctor from {DeclaringType}: Failed to validate {TypeName}",
+                      ctor.DeclaringType?.FullName, parameter.ParameterType.FullName!);
+            return false;
+        }
+    }
+    
+    return true;
+}
+```
+
+<Warning>
+  If your plugin requests a service that doesn't exist, it will fail to load with a dependency resolution error.
+</Warning>
+
+## Testing with DI
+
+Constructor injection makes testing easier:
+
+```csharp
+// In your tests, you can provide mock services
+var mockCommands = new Mock<ICommandManager>();
+var mockChat = new Mock<IChatGui>();
+
+var plugin = new MyPlugin(
+    mockPluginInterface.Object,
+    mockCommands.Object,
+    mockChat.Object
+);
+
+// Verify behavior
+mockCommands.Verify(x => x.AddHandler("/mycommand", It.IsAny<CommandInfo>()), Times.Once);
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Prefer Constructor Injection" icon="check">
+    Constructor injection is more explicit and testable:
+    
+    ```csharp
+    // Good
+    public MyPlugin(IClientState clientState, IChatGui chat)
+    {
+        this.clientState = clientState;
+        this.chat = chat;
+    }
+    
+    // Less ideal
+    [PluginService] public static IClientState ClientState { get; set; } = null!;
+    [PluginService] public static IChatGui Chat { get; set; } = null!;
+    ```
+  </Accordion>
+
+  <Accordion title="Use Interfaces" icon="shapes">
+    Always request services by their interface, not concrete type:
+    
+    ```csharp
+    // Good
+    public MyPlugin(IClientState clientState)
+    
+    // Bad
+    public MyPlugin(ClientState clientState)
+    ```
+  </Accordion>
+
+  <Accordion title="Store as Fields" icon="box">
+    Store injected services as private readonly fields:
+    
+    ```csharp
+    private readonly IClientState clientState;
+    private readonly IChatGui chat;
+    
+    public MyPlugin(IClientState clientState, IChatGui chat)
+    {
+        this.clientState = clientState;
+        this.chat = chat;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Don't Over-Inject" icon="triangle-exclamation">
+    Only inject services you actually use:
+    
+    ```csharp
+    // Bad - injecting services "just in case"
+    public MyPlugin(
+        IClientState clientState,
+        IDataManager dataManager,
+        IGameGui gameGui,
+        ITextureProvider textures,
+        ITargetManager targets,
+        // ... 10 more services you don't use
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Service Locator" icon="magnifying-glass" href="/concepts/service-locator">
+    Learn about the Service&lt;T&gt; pattern for accessing services
+  </Card>
+
+  <Card title="Plugin Lifecycle" icon="rotate" href="/concepts/plugin-lifecycle">
+    Understand when services become available
+  </Card>
+
+  <Card title="Architecture" icon="building" href="/concepts/architecture">
+    See how services fit into Dalamud's architecture
+  </Card>
+
+  <Card title="API Reference" icon="book" href="/api/services/overview">
+    Browse all injectable services
+  </Card>
+</CardGroup>

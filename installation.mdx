@@ -1,0 +1,365 @@
+---
+title: "Installation & Setup"
+description: "Set up your development environment for building Dalamud plugins"
+---
+
+## Prerequisites
+
+Before you start developing Dalamud plugins, ensure you have the following installed on your Windows development machine:
+
+<Steps>
+  <Step title=".NET SDK">
+    Download and install the **.NET 8.0 SDK** (or later) from [Microsoft's official site](https://dotnet.microsoft.com/download).
+    
+    <CodeGroup>
+    ```bash Windows (PowerShell)
+    # Verify installation
+    dotnet --version
+    ```
+    ```bash Windows (CMD)
+    # Verify installation
+    dotnet --version
+    ```
+    </CodeGroup>
+    
+    You should see output like `8.0.100` or higher.
+    
+    <Note>
+      Dalamud plugins target .NET 8.0 by default. Make sure you have the SDK, not just the runtime.
+    </Note>
+  </Step>
+  
+  <Step title="IDE or Text Editor">
+    Choose a development environment:
+    
+    <CardGroup cols={3}>
+      <Card title="Visual Studio 2022" icon="microsoft">
+        Full-featured IDE with excellent C# support (Community edition is free)
+      </Card>
+      <Card title="JetBrains Rider" icon="code">
+        Premium C# IDE with advanced refactoring tools
+      </Card>
+      <Card title="Visual Studio Code" icon="code">
+        Lightweight editor with C# extension support
+      </Card>
+    </CardGroup>
+    
+    <Tip>
+      For Visual Studio, install the **.NET desktop development** workload during setup.
+    </Tip>
+  </Step>
+  
+  <Step title="Git (Optional but Recommended)">
+    Install [Git for Windows](https://git-scm.com/download/win) to clone templates and manage your plugin source code.
+    
+    ```bash
+    git --version
+    ```
+  </Step>
+  
+  <Step title="XIVLauncher & Dalamud">
+    Install [XIVLauncher](https://goatcorp.github.io/) which includes Dalamud for testing your plugins.
+    
+    <Warning>
+      You need a running FFXIV installation with Dalamud to test plugins. XIVLauncher handles this automatically.
+    </Warning>
+  </Step>
+</Steps>
+
+## Project Setup
+
+### Option 1: Using the Sample Plugin Template (Recommended)
+
+The easiest way to start is by cloning the official Sample Plugin template:
+
+<Steps>
+  <Step title="Clone the Template">
+    ```bash
+    git clone https://github.com/goatcorp/SamplePlugin.git MyAwesomePlugin
+    cd MyAwesomePlugin
+    ```
+  </Step>
+  
+  <Step title="Rename and Configure">
+    Open the solution in your IDE and rename the project:
+    
+    1. Rename the `.csproj` file
+    2. Update the `Name` and `InternalName` in the plugin manifest JSON
+    3. Update the namespace in source files
+    4. Modify the plugin class name if desired
+  </Step>
+  
+  <Step title="Restore Dependencies">
+    ```bash
+    dotnet restore
+    ```
+    
+    This downloads the Dalamud API package and other dependencies.
+  </Step>
+</Steps>
+
+### Option 2: Manual Project Creation
+
+If you prefer to set up from scratch:
+
+<Steps>
+  <Step title="Create a Class Library Project">
+    ```bash
+    dotnet new classlib -n MyPlugin -f net8.0-windows
+    cd MyPlugin
+    ```
+  </Step>
+  
+  <Step title="Add the Dalamud Package">
+    Add the Dalamud API NuGet package to your project:
+    
+    ```bash
+    dotnet add package DalamudPackager
+    ```
+    
+    <Note>
+      The `DalamudPackager` includes the Dalamud API and build tools needed for plugin development.
+    </Note>
+  </Step>
+  
+  <Step title="Configure the Project File">
+    Edit your `.csproj` file to include these properties:
+    
+    ```xml MyPlugin.csproj
+    <Project Sdk="Microsoft.NET.Sdk">
+      <PropertyGroup>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <OutputPath>bin\$(Configuration)\</OutputPath>
+        <DalamudLibPath>$(AppData)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+      </PropertyGroup>
+
+      <ItemGroup>
+        <PackageReference Include="DalamudPackager" Version="2.1.13" />
+      </ItemGroup>
+    </Project>
+    ```
+  </Step>
+  
+  <Step title="Create the Plugin Manifest">
+    Create a JSON manifest file (e.g., `MyPlugin.json`) in your project root:
+    
+    ```json MyPlugin.json
+    {
+      "Author": "Your Name",
+      "Name": "My Awesome Plugin",
+      "Punchline": "A short description of your plugin",
+      "Description": "A longer description that explains what your plugin does and why it's useful.",
+      "InternalName": "MyAwesomePlugin",
+      "ApplicableVersion": "any",
+      "Tags": ["utility", "ui"]
+    }
+    ```
+    
+    <Info>
+      The `InternalName` must be unique and is used to identify your plugin in the Dalamud ecosystem.
+    </Info>
+  </Step>
+</Steps>
+
+## Development Environment Configuration
+
+### DalamudLibPath Setup
+
+For your IDE to find Dalamud assemblies, you need to set the `DalamudLibPath` correctly:
+
+<Tabs>
+  <Tab title="Standard XIVLauncher">
+    The default path is:
+    ```
+    %AppData%\XIVLauncher\addon\Hooks\dev\
+    ```
+    
+    This is typically:
+    ```
+    C:\Users\YourName\AppData\Roaming\XIVLauncher\addon\Hooks\dev\
+    ```
+  </Tab>
+  
+  <Tab title="Custom Installation">
+    If you installed XIVLauncher to a custom location, update the path in your `.csproj`:
+    
+    ```xml
+    <DalamudLibPath>C:\Path\To\Your\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  If your IDE shows errors for Dalamud types, verify that `DalamudLibPath` points to a valid directory containing `Dalamud.dll`.
+</Warning>
+
+### Enable DevPlugin Loading
+
+To test your plugin during development:
+
+<Steps>
+  <Step title="Open Dalamud Settings">
+    In-game, type `/xlsettings` to open the Dalamud settings window.
+  </Step>
+  
+  <Step title="Enable DevPlugins">
+    Go to the **Experimental** tab and check **Enable DevPlugin loading**.
+  </Step>
+  
+  <Step title="Set DevPlugin Path">
+    In the **DevPlugins** section, click **Add** and browse to your plugin's build output directory:
+    
+    ```
+    C:\Path\To\Your\Plugin\bin\Debug\
+    ```
+  </Step>
+  
+  <Step title="Load Your Plugin">
+    Click **Load** next to your plugin in the DevPlugins list. It should now appear in `/xlplugins`.
+  </Step>
+</Steps>
+
+## Build and Test
+
+### Building Your Plugin
+
+<CodeGroup>
+```bash Debug Build
+dotnet build
+```
+
+```bash Release Build
+dotnet build -c Release
+```
+</CodeGroup>
+
+The output DLL will be in `bin\Debug\` or `bin\Release\` depending on your configuration.
+
+### Testing In-Game
+
+<Steps>
+  <Step title="Launch FFXIV via XIVLauncher">
+    Start the game through XIVLauncher (not the official launcher).
+  </Step>
+  
+  <Step title="Open Plugin Installer">
+    Press `Escape` and click the **Plugin Installer** button, or type `/xlplugins`.
+  </Step>
+  
+  <Step title="View DevPlugins Tab">
+    Navigate to the **Dev Plugins** tab to see your plugin listed.
+  </Step>
+  
+  <Step title="Load and Test">
+    Click **Load** to initialize your plugin. Use `/xldev` to access the developer menu for debugging.
+  </Step>
+</Steps>
+
+### Hot Reload During Development
+
+<Tip>
+  For faster iteration, you can unload and reload your plugin without restarting the game:
+  
+  1. Click **Unload** in the DevPlugins tab
+  2. Rebuild your plugin (`dotnet build`)
+  3. Click **Load** again
+  
+  This works as long as you properly dispose of all resources in your plugin's `Dispose()` method.
+</Tip>
+
+## Debugging
+
+### Attach Debugger
+
+You can attach your IDE's debugger to the game process:
+
+<Tabs>
+  <Tab title="Visual Studio">
+    1. Go to **Debug** → **Attach to Process**
+    2. Find `ffxiv_dx11.exe` in the process list
+    3. Click **Attach**
+    4. Set breakpoints in your plugin code
+  </Tab>
+  
+  <Tab title="Rider">
+    1. Go to **Run** → **Attach to Process**
+    2. Search for `ffxiv_dx11.exe`
+    3. Click **Attach with .NET Core Debugger**
+    4. Set breakpoints in your plugin code
+  </Tab>
+</Tabs>
+
+<Note>
+  Debugging works best when your plugin is built in **Debug** configuration.
+</Note>
+
+### Logging
+
+Use the `IPluginLog` service for logging:
+
+```csharp
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IPluginLog log;
+    
+    public MyPlugin(IPluginLog pluginLog)
+    {
+        this.log = pluginLog;
+        this.log.Info("Plugin initialized!");
+    }
+}
+```
+
+View logs in-game using `/xllog` or check the log file at:
+```
+%AppData%\XIVLauncher\dalamud.log
+```
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion icon="triangle-exclamation" title="DalamudLibPath not found">
+    **Error:** Cannot find Dalamud assemblies
+    
+    **Solution:** Verify that XIVLauncher is installed and has run at least once. The `DalamudLibPath` directory is created when Dalamud loads for the first time.
+  </Accordion>
+  
+  <Accordion icon="triangle-exclamation" title="Plugin won't load in-game">
+    **Error:** Plugin appears but won't load
+    
+    **Solution:** 
+    - Check that your plugin class implements `IDalamudPlugin`
+    - Ensure the manifest JSON has a unique `InternalName`
+    - Verify that all services are injected correctly in the constructor
+    - Check `/xllog` for specific error messages
+  </Accordion>
+  
+  <Accordion icon="triangle-exclamation" title="Types not available after build">
+    **Error:** Game data types or services are null at runtime
+    
+    **Solution:** Some services may not be available until the player is logged in. Always check for null before using game state services.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that your environment is set up, you're ready to build your first plugin!
+
+<Card title="Create Your First Plugin" icon="rocket" href="/quickstart">
+  Follow the quickstart guide to build a working plugin in minutes
+</Card>
+
+For a deeper understanding of plugin architecture, check out:
+
+<CardGroup cols={2}>
+  <Card title="Plugin Lifecycle" icon="rotate" href="/concepts/plugin-lifecycle">
+    Learn how plugins are initialized and disposed
+  </Card>
+  <Card title="Dependency Injection" icon="plug" href="/concepts/dependency-injection">
+    Understand service injection patterns
+  </Card>
+</CardGroup>

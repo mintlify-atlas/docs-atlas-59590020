@@ -1,0 +1,420 @@
+---
+title: Client State
+description: Access game client state including territory, login status, and game events
+---
+
+The `IClientState` service provides access to the current state of the game client, including information about the player's location, login status, and various game state events.
+
+## Getting Started
+
+Inject the service into your plugin:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly IClientState clientState;
+
+    public MyPlugin(IClientState clientState)
+    {
+        this.clientState = clientState;
+        
+        // Subscribe to events
+        this.clientState.Login += OnLogin;
+        this.clientState.TerritoryChanged += OnTerritoryChanged;
+    }
+
+    private void OnLogin()
+    {
+        // Player has logged in
+    }
+
+    private void OnTerritoryChanged(ushort territoryId)
+    {
+        // Player changed zones
+    }
+
+    public void Dispose()
+    {
+        this.clientState.Login -= OnLogin;
+        this.clientState.TerritoryChanged -= OnTerritoryChanged;
+    }
+}
+```
+
+## Properties
+
+### ClientLanguage
+
+Gets the language of the client.
+
+```csharp
+ClientLanguage ClientLanguage { get; }
+```
+
+**Example:**
+
+```csharp
+var language = clientState.ClientLanguage;
+if (language == ClientLanguage.English)
+{
+    // Show English text
+}
+```
+
+### TerritoryType
+
+Gets the current territory the player resides in.
+
+```csharp
+ushort TerritoryType { get; }
+```
+
+**Example:**
+
+```csharp
+var currentTerritory = clientState.TerritoryType;
+if (currentTerritory == 886) // The Tempest
+{
+    // Do something specific to this zone
+}
+```
+
+### MapId
+
+Gets the current map the player resides in.
+
+```csharp
+uint MapId { get; }
+```
+
+### Instance
+
+Gets the instance number of the current zone, used when multiple copies of an area are active.
+
+```csharp
+uint Instance { get; }
+```
+
+### IsLoggedIn
+
+Gets a value indicating whether a character is logged in.
+
+```csharp
+bool IsLoggedIn { get; }
+```
+
+**Example:**
+
+```csharp
+if (clientState.IsLoggedIn)
+{
+    // Player is logged in and ready
+}
+```
+
+### IsPvP
+
+Gets a value indicating whether the user is playing PvP.
+
+```csharp
+bool IsPvP { get; }
+```
+
+### IsPvPExcludingDen
+
+Gets a value indicating whether the user is playing PvP, excluding the Wolves' Den.
+
+```csharp
+bool IsPvPExcludingDen { get; }
+```
+
+### IsGPosing
+
+Gets a value indicating whether the client is currently in Group Pose (GPose) mode.
+
+```csharp
+bool IsGPosing { get; }
+```
+
+## Methods
+
+### IsClientIdle
+
+Check whether the client is currently "idle". This means a player is not logged in, or is not actively in combat or doing anything that we may not want to disrupt.
+
+```csharp
+bool IsClientIdle(out ConditionFlag blockingFlag)
+bool IsClientIdle()
+```
+
+<ParamField path="blockingFlag" type="ConditionFlag">
+  An output parameter containing the first observed condition blocking the "idle" state. 0 if idle.
+</ParamField>
+
+**Returns:** `true` if the client is idle, `false` otherwise.
+
+**Example:**
+
+```csharp
+if (clientState.IsClientIdle(out var blockingFlag))
+{
+    // Safe to perform background operations
+}
+else
+{
+    // Player is busy with: blockingFlag
+}
+```
+
+## Events
+
+### ZoneInit
+
+Event that gets fired when the game initializes a zone.
+
+```csharp
+event Action<ZoneInitEventArgs> ZoneInit
+```
+
+**Example:**
+
+```csharp
+clientState.ZoneInit += (args) =>
+{
+    // Zone is initializing
+};
+```
+
+### TerritoryChanged
+
+Event that gets fired when the current territory changes.
+
+```csharp
+event Action<ushort> TerritoryChanged
+```
+
+**Example:**
+
+```csharp
+clientState.TerritoryChanged += (territoryId) =>
+{
+    chatGui.Print($"Entered territory: {territoryId}");
+};
+```
+
+### MapIdChanged
+
+Event that gets fired when the current map changes.
+
+```csharp
+event Action<uint> MapIdChanged
+```
+
+### InstanceChanged
+
+Event that gets fired when the current zone instance changes.
+
+```csharp
+event Action<uint> InstanceChanged
+```
+
+### ClassJobChanged
+
+Event that fires when a character's ClassJob changed.
+
+```csharp
+event ClassJobChangeDelegate? ClassJobChanged
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void ClassJobChangeDelegate(uint classJobId)
+```
+
+<ParamField path="classJobId" type="uint">
+  The new ClassJob ID
+</ParamField>
+
+**Example:**
+
+```csharp
+clientState.ClassJobChanged += (classJobId) =>
+{
+    chatGui.Print($"Switched to job: {classJobId}");
+};
+```
+
+### LevelChanged
+
+Event that fires when any character level changes, including levels for a not-currently-active ClassJob (e.g. PvP matches, DoH/DoL).
+
+```csharp
+event LevelChangeDelegate? LevelChanged
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void LevelChangeDelegate(uint classJobId, uint level)
+```
+
+<ParamField path="classJobId" type="uint">
+  The ClassJob ID
+</ParamField>
+
+<ParamField path="level" type="uint">
+  The level of the corresponding ClassJob
+</ParamField>
+
+**Example:**
+
+```csharp
+clientState.LevelChanged += (classJobId, level) =>
+{
+    chatGui.Print($"Job {classJobId} is now level {level}!");
+};
+```
+
+### Login
+
+Event that fires when a character is logging in, and the local character object is available.
+
+```csharp
+event Action Login
+```
+
+**Example:**
+
+```csharp
+clientState.Login += () =>
+{
+    chatGui.Print("Welcome back!");
+};
+```
+
+### Logout
+
+Event that fires when a character is logging out.
+
+```csharp
+event LogoutDelegate Logout
+```
+
+**Delegate signature:**
+
+```csharp
+public delegate void LogoutDelegate(int type, int code)
+```
+
+<ParamField path="type" type="int">
+  The type of logout
+</ParamField>
+
+<ParamField path="code" type="int">
+  The success/failure code
+</ParamField>
+
+### EnterPvP
+
+Event that fires when a character is entering PvP.
+
+```csharp
+event Action EnterPvP
+```
+
+### LeavePvP
+
+Event that fires when a character is leaving PvP.
+
+```csharp
+event Action LeavePvP
+```
+
+### CfPop
+
+Event that gets fired when a duty is ready.
+
+```csharp
+event Action<Lumina.Excel.Sheets.ContentFinderCondition> CfPop
+```
+
+**Example:**
+
+```csharp
+clientState.CfPop += (content) =>
+{
+    // Duty finder queue has popped
+    chatGui.Print($"Duty ready: {content.Name}");
+};
+```
+
+## Common Use Cases
+
+### Zone-Specific Logic
+
+```csharp
+public void CheckTerritory()
+{
+    if (!clientState.IsLoggedIn)
+        return;
+
+    var territory = clientState.TerritoryType;
+    switch (territory)
+    {
+        case 886: // The Tempest
+            // Enable specific features
+            break;
+        default:
+            // Default behavior
+            break;
+    }
+}
+```
+
+### Tracking Player Progress
+
+```csharp
+private void Initialize()
+{
+    clientState.LevelChanged += (classJobId, level) =>
+    {
+        // Save level progress
+        SaveLevelData(classJobId, level);
+        
+        if (level % 10 == 0)
+        {
+            chatGui.Print($"Congratulations on reaching level {level}!");
+        }
+    };
+}
+```
+
+### Safe Background Operations
+
+```csharp
+public void PerformBackgroundTask()
+{
+    if (clientState.IsClientIdle(out var blockingFlag))
+    {
+        // Safe to perform operations
+        ProcessData();
+    }
+    else
+    {
+        // Defer operation
+        Logger.Debug($"Client busy: {blockingFlag}");
+    }
+}
+```
+
+<Note>
+  Always unsubscribe from events in your plugin's `Dispose` method to prevent memory leaks.
+</Note>
+
+<Warning>
+  The `LocalPlayer` and `LocalContentId` properties are obsolete. Use `IPlayerState` or `IObjectTable.LocalPlayer` instead.
+</Warning>

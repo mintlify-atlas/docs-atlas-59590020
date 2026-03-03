@@ -1,0 +1,460 @@
+---
+title: Target Manager
+description: Get and set various kinds of targets for the player
+---
+
+The `ITargetManager` service allows you to get and set various types of targets in the game, including the current target, mouseover target, focus target, and more.
+
+## Getting Started
+
+Inject the service into your plugin:
+
+```csharp
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using Dalamud.Game.ClientState.Objects.Types;
+
+public class MyPlugin : IDalamudPlugin
+{
+    private readonly ITargetManager targetManager;
+
+    public MyPlugin(ITargetManager targetManager)
+    {
+        this.targetManager = targetManager;
+    }
+
+    public void CheckTarget()
+    {
+        var target = targetManager.Target;
+        if (target != null)
+        {
+            // Process target
+        }
+    }
+}
+```
+
+## Properties
+
+All target properties are both readable and writable. Setting a target to `null` will clear it.
+
+### Target
+
+Gets or sets the current target.
+
+```csharp
+IGameObject? Target { get; set; }
+```
+
+**Example:**
+
+```csharp
+// Get current target
+var currentTarget = targetManager.Target;
+if (currentTarget != null)
+{
+    chatGui.Print($"Current target: {currentTarget.Name}");
+}
+
+// Set target
+targetManager.Target = someGameObject;
+
+// Clear target
+targetManager.Target = null;
+```
+
+### MouseOverTarget
+
+Gets or sets the mouseover target.
+
+```csharp
+IGameObject? MouseOverTarget { get; set; }
+```
+
+**Example:**
+
+```csharp
+var mouseOver = targetManager.MouseOverTarget;
+if (mouseOver != null)
+{
+    // Show tooltip or highlight
+    ShowObjectInfo(mouseOver);
+}
+```
+
+### FocusTarget
+
+Gets or sets the focus target.
+
+```csharp
+IGameObject? FocusTarget { get; set; }
+```
+
+**Example:**
+
+```csharp
+// Set focus target to current target
+if (targetManager.Target != null)
+{
+    targetManager.FocusTarget = targetManager.Target;
+    chatGui.Print("Focus target set");
+}
+
+// Clear focus target
+targetManager.FocusTarget = null;
+```
+
+### PreviousTarget
+
+Gets or sets the previous target.
+
+```csharp
+IGameObject? PreviousTarget { get; set; }
+```
+
+**Example:**
+
+```csharp
+// Return to previous target
+if (targetManager.PreviousTarget != null)
+{
+    targetManager.Target = targetManager.PreviousTarget;
+}
+```
+
+### SoftTarget
+
+Gets or sets the soft target.
+
+```csharp
+IGameObject? SoftTarget { get; set; }
+```
+
+<Note>
+  Soft targeting is used for controller/gamepad targeting where objects are highlighted without being fully targeted.
+</Note>
+
+### GPoseTarget
+
+Gets or sets the gpose target.
+
+```csharp
+IGameObject? GPoseTarget { get; set; }
+```
+
+**Example:**
+
+```csharp
+if (clientState.IsGPosing)
+{
+    var gposeTarget = targetManager.GPoseTarget;
+    if (gposeTarget != null)
+    {
+        // Process GPose target
+    }
+}
+```
+
+### MouseOverNameplateTarget
+
+Gets or sets the mouseover nameplate target.
+
+```csharp
+IGameObject? MouseOverNameplateTarget { get; set; }
+```
+
+**Example:**
+
+```csharp
+var nameplateTarget = targetManager.MouseOverNameplateTarget;
+if (nameplateTarget != null)
+{
+    // Object under nameplate cursor
+}
+```
+
+## Common Use Cases
+
+### Target Monitoring
+
+```csharp
+private IGameObject? lastTarget;
+
+private void OnFrameworkUpdate(IFramework fw)
+{
+    var currentTarget = targetManager.Target;
+    
+    if (currentTarget != lastTarget)
+    {
+        OnTargetChanged(lastTarget, currentTarget);
+        lastTarget = currentTarget;
+    }
+}
+
+private void OnTargetChanged(IGameObject? oldTarget, IGameObject? newTarget)
+{
+    if (newTarget == null)
+    {
+        chatGui.Print("Target cleared");
+        return;
+    }
+    
+    chatGui.Print($"New target: {newTarget.Name}");
+    
+    if (newTarget is IBattleChara battleChara)
+    {
+        chatGui.Print($"HP: {battleChara.CurrentHp}/{battleChara.MaxHp}");
+    }
+}
+```
+
+### Smart Targeting
+
+```csharp
+public void TargetNearestEnemy()
+{
+    var player = clientState.LocalPlayer;
+    if (player == null)
+        return;
+    
+    IGameObject? nearestEnemy = null;
+    float nearestDistance = float.MaxValue;
+    
+    foreach (var obj in objectTable)
+    {
+        if (obj is not IBattleChara battleChara)
+            continue;
+        
+        if (!IsHostile(battleChara))
+            continue;
+        
+        var distance = Vector3.Distance(player.Position, obj.Position);
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearestEnemy = obj;
+        }
+    }
+    
+    if (nearestEnemy != null)
+    {
+        targetManager.Target = nearestEnemy;
+    }
+}
+```
+
+### Target Cycling
+
+```csharp
+private List<IGameObject> enemyList = new();
+private int currentEnemyIndex = 0;
+
+public void CycleTargets()
+{
+    // Build enemy list
+    enemyList.Clear();
+    foreach (var obj in objectTable)
+    {
+        if (obj is IBattleChara battleChara && IsHostile(battleChara))
+        {
+            enemyList.Add(obj);
+        }
+    }
+    
+    if (enemyList.Count == 0)
+        return;
+    
+    // Find current target in list
+    var currentTarget = targetManager.Target;
+    if (currentTarget != null)
+    {
+        currentEnemyIndex = enemyList.IndexOf(currentTarget);
+    }
+    
+    // Cycle to next
+    currentEnemyIndex = (currentEnemyIndex + 1) % enemyList.Count;
+    targetManager.Target = enemyList[currentEnemyIndex];
+}
+```
+
+### Focus Target Assistant
+
+```csharp
+public void AutoSetFocusTarget()
+{
+    var target = targetManager.Target;
+    if (target == null)
+        return;
+    
+    // Auto-focus bosses or important enemies
+    if (target is IBattleChara battleChara)
+    {
+        if (IsBoss(battleChara) || IsImportantEnemy(battleChara))
+        {
+            targetManager.FocusTarget = target;
+            chatGui.Print($"Auto-focused: {target.Name}", "AutoFocus", 500);
+        }
+    }
+}
+
+private bool IsBoss(IBattleChara chara)
+{
+    // Boss detection logic
+    return chara.BattleNpcKind == BattleNpcSubKind.BossType2
+        || chara.BattleNpcKind == BattleNpcSubKind.BossType3;
+}
+```
+
+### Mouseover Actions
+
+```csharp
+private IGameObject? lastMouseOver;
+
+private void OnFrameworkUpdate(IFramework fw)
+{
+    var mouseOver = targetManager.MouseOverTarget;
+    
+    if (mouseOver != lastMouseOver)
+    {
+        if (mouseOver != null)
+        {
+            OnMouseOverEnter(mouseOver);
+        }
+        else if (lastMouseOver != null)
+        {
+            OnMouseOverExit(lastMouseOver);
+        }
+        
+        lastMouseOver = mouseOver;
+    }
+}
+
+private void OnMouseOverEnter(IGameObject obj)
+{
+    // Show custom tooltip or highlight
+    ShowTooltip(obj);
+}
+
+private void OnMouseOverExit(IGameObject obj)
+{
+    // Hide tooltip
+    HideTooltip();
+}
+```
+
+### Target History
+
+```csharp
+private readonly Queue<IGameObject> targetHistory = new();
+private const int MaxHistorySize = 10;
+
+private void OnTargetChanged(IGameObject? newTarget)
+{
+    if (newTarget == null)
+        return;
+    
+    targetHistory.Enqueue(newTarget);
+    
+    if (targetHistory.Count > MaxHistorySize)
+        targetHistory.Dequeue();
+}
+
+public void ShowTargetHistory()
+{
+    chatGui.Print("Recent targets:", "History", 575);
+    
+    var index = 1;
+    foreach (var target in targetHistory.Reverse())
+    {
+        chatGui.Print($"{index}. {target.Name}");
+        index++;
+    }
+}
+
+public void RestoreTargetFromHistory(int index)
+{
+    var target = targetHistory.Reverse().ElementAtOrDefault(index - 1);
+    if (target != null)
+    {
+        targetManager.Target = target;
+    }
+}
+```
+
+### Target Validation
+
+```csharp
+public bool IsValidTarget(IGameObject? target)
+{
+    if (target == null)
+        return false;
+    
+    // Check if target is still valid
+    if (!objectTable.Any(o => o.GameObjectId == target.GameObjectId))
+        return false;
+    
+    // Check if target is in range
+    var player = clientState.LocalPlayer;
+    if (player != null)
+    {
+        var distance = Vector3.Distance(player.Position, target.Position);
+        if (distance > 50f) // Max interaction range
+            return false;
+    }
+    
+    return true;
+}
+
+public void ValidateCurrentTarget()
+{
+    if (!IsValidTarget(targetManager.Target))
+    {
+        chatGui.Print("Target is no longer valid");
+        targetManager.Target = null;
+    }
+}
+```
+
+### Context-Aware Targeting
+
+```csharp
+public void SmartTarget()
+{
+    var player = clientState.LocalPlayer;
+    if (player == null)
+        return;
+    
+    // Prioritize mouseover
+    var mouseOver = targetManager.MouseOverTarget;
+    if (mouseOver != null && IsValidTarget(mouseOver))
+    {
+        targetManager.Target = mouseOver;
+        return;
+    }
+    
+    // Prioritize nearby interactable objects
+    foreach (var obj in objectTable)
+    {
+        if (obj.ObjectKind == ObjectKind.EventObj)
+        {
+            var distance = Vector3.Distance(player.Position, obj.Position);
+            if (distance < 5f)
+            {
+                targetManager.Target = obj;
+                return;
+            }
+        }
+    }
+    
+    // Fall back to nearest enemy
+    TargetNearestEnemy();
+}
+```
+
+<Note>
+  Target references can become invalid when objects are removed from the game world. Always validate targets before using them.
+</Note>
+
+<Warning>
+  Setting targets programmatically may interfere with player control. Use sparingly and only when appropriate.
+</Warning>

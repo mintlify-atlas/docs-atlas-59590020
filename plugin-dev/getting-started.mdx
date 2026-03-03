@@ -1,0 +1,236 @@
+---
+title: "Getting Started"
+description: "Learn the basics of Dalamud plugin development"
+---
+
+<Info>
+  **Prerequisites**:
+  - .NET 8.0 SDK or later
+  - Visual Studio 2022 or JetBrains Rider
+  - Basic knowledge of C# programming
+  - Final Fantasy XIV installed with Dalamud
+</Info>
+
+## What is a Dalamud Plugin?
+
+Dalamud plugins are .NET assemblies that extend the functionality of Final Fantasy XIV. They have access to the Dalamud API, which provides:
+
+- Game state information (player data, inventory, party members, etc.)
+- UI rendering capabilities via ImGui
+- Command registration for chat commands
+- Event hooks for game events
+- Inter-plugin communication (IPC)
+- Memory manipulation and function hooking
+
+## Plugin Architecture
+
+Every Dalamud plugin must:
+
+1. **Implement `IDalamudPlugin`** - The core plugin interface
+2. **Include a manifest** - A JSON file describing your plugin
+3. **Accept `IDalamudPluginInterface`** - Provides access to Dalamud services
+4. **Be disposable** - Clean up resources when unloaded
+
+### Basic Plugin Structure
+
+```csharp
+using Dalamud.Plugin;
+
+namespace MyPlugin;
+
+public class Plugin : IDalamudPlugin
+{
+    private readonly IDalamudPluginInterface pluginInterface;
+
+    public Plugin(IDalamudPluginInterface pluginInterface)
+    {
+        this.pluginInterface = pluginInterface;
+        
+        // Initialize your plugin here
+    }
+
+    public void Dispose()
+    {
+        // Clean up resources here
+    }
+}
+```
+
+## Setting Up Your Development Environment
+
+<Steps>
+<Step title="Install the .NET SDK">
+
+Download and install the [.NET 8.0 SDK](https://dotnet.microsoft.com/download) or later.
+
+Verify installation:
+
+```bash
+dotnet --version
+```
+
+</Step>
+
+<Step title="Choose an IDE">
+
+Recommended IDEs:
+
+- **Visual Studio 2022** (Community edition is free)
+- **JetBrains Rider** (Paid, but excellent for C# development)
+- **Visual Studio Code** with C# extensions
+
+</Step>
+
+<Step title="Install Dalamud Development Packages">
+
+Dalamud packages are available on NuGet. You'll primarily need:
+
+```xml
+<PackageReference Include="DalamudPackager" Version="2.1.13" />
+```
+
+This package handles:
+- Building your plugin manifest
+- Packaging your plugin for distribution
+- Including required Dalamud assemblies
+
+</Step>
+
+<Step title="Set up Dev Plugin Directory">
+
+Create a `devPlugins` folder in your Dalamud directory:
+
+```
+%AppData%\XIVLauncher\devPlugins\YourPlugin\
+```
+
+Dalamud will automatically load plugins from this directory.
+
+</Step>
+</Steps>
+
+## Plugin Lifecycle
+
+Understanding the plugin lifecycle is crucial:
+
+<Steps>
+<Step title="Load">
+
+1. Dalamud locates your plugin DLL
+2. Loads the assembly into a separate `AssemblyLoadContext`
+3. Finds the type implementing `IDalamudPlugin`
+4. Creates an instance via dependency injection
+5. Your constructor executes
+
+</Step>
+
+<Step title="Run">
+
+Your plugin is now active:
+- Event handlers receive game events
+- UI draws on every frame
+- Commands are registered and callable
+- Services are accessible
+
+</Step>
+
+<Step title="Unload">
+
+1. `Dispose()` is called on your plugin instance
+2. You must clean up all resources:
+   - Unregister commands
+   - Unhook events
+   - Dispose UI elements
+   - Release memory hooks
+3. Assembly is unloaded from memory
+
+</Step>
+</Steps>
+
+## Load Reasons
+
+Your plugin receives a `PluginLoadReason` indicating why it was loaded:
+
+```csharp
+public enum PluginLoadReason
+{
+    Unknown = 1 << 0,      // Unknown reason
+    Installer = 1 << 1,    // Installed via plugin installer
+    Update = 1 << 2,       // Just updated
+    Reload = 1 << 3,       // Developer reload
+    Boot = 1 << 4,         // Game started or Dalamud reinjected
+}
+```
+
+Access it via:
+
+```csharp
+var reason = pluginInterface.Reason;
+
+if (reason.HasFlag(PluginLoadReason.Boot))
+{
+    // First time loading this session
+}
+```
+
+## Development Workflow
+
+<AccordionGroup>
+  <Accordion title="Build and Test Locally">
+    1. Build your project in Debug mode
+    2. Copy output to `devPlugins/YourPlugin/`
+    3. Type `/xlplugins` in-game to open the plugin installer
+    4. Enable "Dev Plugin Manager" settings
+    5. Load your plugin from the Dev Plugins tab
+  </Accordion>
+
+  <Accordion title="Hot Reload">
+    Dev plugins support hot reloading:
+    1. Make changes to your code
+    2. Build the project
+    3. Use `/xldev` in-game
+    4. Click "Reload" next to your plugin
+    
+    Your plugin will unload and reload without restarting the game.
+  </Accordion>
+
+  <Accordion title="Debug with Visual Studio">
+    1. Set build output to your `devPlugins` folder
+    2. Start FFXIV with Dalamud
+    3. In Visual Studio: Debug → Attach to Process
+    4. Select `ffxiv_dx11.exe`
+    5. Set breakpoints in your code
+    
+    The debugger will hit your breakpoints when code executes.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Always Dispose" icon="trash">
+  Properly clean up all resources in `Dispose()`. Leaked resources can cause crashes or performance issues.
+</Card>
+
+<Card title="Use Dependency Injection" icon="plug">
+  Request services through constructor parameters. Dalamud will inject them automatically.
+</Card>
+
+<Card title="Handle Errors Gracefully" icon="shield-check">
+  Wrap risky operations in try-catch blocks. Uncaught exceptions will crash the game.
+</Card>
+
+<Card title="Test on Multiple API Levels" icon="vial">
+  Ensure your plugin works with the current Dalamud API level. Update dependencies regularly.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+Now that you understand the basics, let's create your first plugin:
+
+<Card title="Creating Your First Plugin" icon="code" href="/plugin-dev/creating-plugin">
+  Follow our step-by-step guide to build a complete plugin
+</Card>
